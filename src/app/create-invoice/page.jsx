@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
-import { calculateNetPrice, formatRupiah } from '@/utils/taxCalculator';
+import { calculateFakturBreakdown, formatRupiah } from '@/utils/taxCalculator';
 
 export default function CreateInvoicePage() {
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function CreateInvoicePage() {
   const [promoName, setPromoName] = useState('STICKER VINYL INDOOR GLOSSY');
   const [isDppActive, setIsDppActive] = useState(false);
 
-  // Sumber Import Mode: 'excel' (POS Recap - Qty/UOM sembunyi & Jasa Cetak Baku) vs 'po' (Client PO PDF - Qty/UOM tampil)
+  // Sumber Import Mode: 'excel' vs 'po'
   const [importSource, setImportSource] = useState('excel');
 
   // State Item Toko Murni
@@ -35,7 +35,6 @@ export default function CreateInvoicePage() {
       if (staged !== null) {
         const parsed = JSON.parse(staged);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Deteksi otomatis apakah asal data dari Client PO PDF atau POS Excel Recap
           const isPo = storedSource === 'po' || parsed.some((s) => s.isPoSource || s.importType === 'po' || (s.uom && s.uom !== 'PCS'));
           setImportSource(isPo ? 'po' : 'excel');
 
@@ -45,24 +44,22 @@ export default function CreateInvoicePage() {
             setWppNumber(parsed[0].no_faktur || parsed[0].wpp_number);
           }
 
-          // Ambil semua baris item
+          // Ambil semua baris item dengan breakdown yang konsisten
           const validStores = parsed.map((s, idx) => {
-            let price = Number(s.total_price || s.nilai_wpp || 0);
-            
-            // Konversi otomatis jika terbaca nilai bruto POS (khusus mode Excel)
-            if (!isPo) {
-              if (price === 1810301 || price === 1746817) price = 1601249;
-              else if (price === 1510804 || price === 1457823) price = 1336338;
-              else if (price > 1700000 && price < 2300000) price = calculateNetPrice(price);
-            }
+            const rawTotalFaktur = Number(s.total_faktur || s.total_price || s.raw_total || s.nilai_wpp || 0);
+            const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 
             return {
               ...s,
               id: s.id || `store-${idx}-${Date.now()}`,
-              total_price: price,
+              total_faktur: s.total_faktur !== undefined ? Number(s.total_faktur) : breakdown.totalFaktur,
+              total_price: s.total_price !== undefined ? Number(s.total_price) : breakdown.totalFaktur,
+              dpp: s.dpp !== undefined ? Number(s.dpp) : breakdown.dpp,
+              jasa_cetak: s.jasa_cetak !== undefined ? Number(s.jasa_cetak) : breakdown.jasaCetak,
+              pph23: s.pph23 !== undefined ? Number(s.pph23) : breakdown.pph23,
               qty: Number(s.qty) || 1,
               uom: s.uom || 'PCS',
-              unit_price: Number(s.unit_price) || price,
+              unit_price: Number(s.unit_price) || rawTotalFaktur,
             };
           });
 
@@ -90,49 +87,29 @@ export default function CreateInvoicePage() {
     }
   };
 
-  // 1. Kalkulasi Baris Item / Toko
+  // 1. Baris Item Terhitung Langsung
   const calculatedStoreRows = stores.map((row) => {
-    const q = Number(row.qty) || 1;
-    const netTotalPrice = importSource === 'po'
-      ? Math.round(q * (Number(row.unit_price) || Number(row.total_price) || 0))
-      : Math.round(Number(row.total_price || 0));
-    const itemDpp = Math.round(netTotalPrice * (11 / 12));
+    const totalFaktur = Number(row.total_faktur || row.total_price || 0);
+    const breakdown = calculateFakturBreakdown(totalFaktur);
+
+    const dpp = row.dpp !== undefined ? Number(row.dpp) : breakdown.dpp;
+    const jasaCetak = row.jasa_cetak !== undefined ? Number(row.jasa_cetak) : breakdown.jasaCetak;
+    const pph23 = row.pph23 !== undefined ? Number(row.pph23) : breakdown.pph23;
+
     return {
       ...row,
-      netTotalPrice,
-      itemDpp,
+      totalFaktur,
+      dpp,
+      jasaCetak,
+      pph23,
     };
   });
 
-  // Subtotal akumulasi toko/item
-  const subtotalStores = calculatedStoreRows.reduce((acc, row) => acc + row.netTotalPrice, 0);
-
-  // 2. Baris JASA CETAK Baku (Hanya jika importByExcel / POS Recap)
-  const hasExplicitJasa = stores.some((it) => it.isJasaCetak);
-  const includeAutoJasa = importSource === 'excel' && !hasExplicitJasa && subtotalStores > 0;
-
-  const dynamicJasaPrice = subtotalStores > 0 ? Math.round(subtotalStores / 9) : 0;
-  const dynamicJasaDpp = Math.round(dynamicJasaPrice * (11 / 12));
-
-  const jasaCetakRow = {
-    id: 'row-jasa-cetak-baku',
-    no_faktur: wppNumber,
-    wpp_number: wppNumber,
-    item_description: 'JASA CETAK',
-    netTotalPrice: dynamicJasaPrice,
-    itemDpp: dynamicJasaDpp,
-    isJasaCetak: true,
-  };
-
-  const displayRows = includeAutoJasa
-    ? [...calculatedStoreRows, jasaCetakRow]
-    : calculatedStoreRows;
-
-  // 3. Rekapitulasi Nilai Akhir
-  const totalOverall = displayRows.reduce((acc, row) => acc + row.netTotalPrice, 0);
-  const totalDppLain = displayRows.reduce((acc, row) => acc + row.itemDpp, 0);
-  const vatAmount = Math.round(totalOverall * 0.11);
-  const grandTotal = totalOverall + vatAmount;
+  // 2. Akumulasi Total Keseluruhan
+  const totalFakturOverall = calculatedStoreRows.reduce((acc, row) => acc + row.totalFaktur, 0);
+  const totalDppOverall = calculatedStoreRows.reduce((acc, row) => acc + row.dpp, 0);
+  const totalJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.jasaCetak, 0);
+  const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
 
   // Submit ke Antrean Approval
   const handleSubmitApproval = () => {
@@ -151,24 +128,29 @@ export default function CreateInvoicePage() {
       created_by: createdByName,
       ar_name: createdByName,
       is_dpp_active: isDppActive,
-      total_harga_net: totalOverall,
-      subtotal_net: totalOverall,
-      dpp_lain: totalDppLain,
-      ppn_amount: vatAmount,
-      grand_total: grandTotal,
+      total_faktur: totalFakturOverall,
+      total_harga_net: totalFakturOverall,
+      subtotal_net: totalFakturOverall,
+      total_dpp: totalDppOverall,
+      total_jasa_cetak: totalJasaCetakOverall,
+      total_pph23: totalPph23Overall,
+      dpp_lain: totalDppOverall,
       time_created: new Date().toISOString().slice(0, 16).replace('T', ' '),
       status: 'waiting_approval',
       importSource: importSource,
-      items: displayRows.map((it) => ({
+      items: calculatedStoreRows.map((it) => ({
         id: it.id,
         no_faktur: it.no_faktur || wppNumber,
         wpp_number: it.wpp_number || wppNumber,
-        item_description: it.item_description,
-        total_price: it.netTotalPrice,
-        dpp_item: it.itemDpp,
+        item_description: it.item_description || it.store_name,
+        total_faktur: it.totalFaktur,
+        total_price: it.totalFaktur,
+        dpp: it.dpp,
+        jasa_cetak: it.jasaCetak,
+        pph23: it.pph23,
         qty: it.qty || 1,
         uom: it.uom || 'PCS',
-        unit_price: it.unit_price || it.netTotalPrice,
+        unit_price: it.unit_price || it.totalFaktur,
       })),
     };
 
@@ -197,7 +179,7 @@ export default function CreateInvoicePage() {
           <div>
             <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoice Creation Form</h1>
             <p className="text-xs text-stone-500 mt-0.5">
-              Adjust date, WPK number, and item details before submitting for approval.
+              Review document details, store items, and breakdown figures before submitting for approval.
             </p>
           </div>
         </div>
@@ -311,9 +293,9 @@ export default function CreateInvoicePage() {
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-stone-100 flex items-center justify-between">
           <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
-            Item Details {importSource === 'po' ? '(Client PO Mode)' : '(POS Excel Mode)'}
+            Item Breakdown Details {importSource === 'po' ? '(Client PO Mode)' : '(POS Excel Mode)'}
           </h2>
-          <span className="text-xs text-stone-400 font-medium">Line Count: {displayRows.length} Items</span>
+          <span className="text-xs text-stone-400 font-medium">Line Count: {calculatedStoreRows.length} Items</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -328,58 +310,59 @@ export default function CreateInvoicePage() {
                     <th className="py-3 px-4 text-center w-20 font-semibold">UOM</th>
                   </>
                 )}
-                <th className="py-3 px-4 text-right w-44 font-semibold">DPP (11/12)</th>
-                <th className="py-3 px-4 text-right w-44 font-semibold">TOTAL PRICE</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">TOTAL FAKTUR</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">DPP (90%)</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">JASA CETAK (10%)</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">PPH 23 (30%)</th>
                 <th className="py-3 px-4 text-center w-16 font-semibold">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 font-normal">
-              {displayRows.map((row, idx) => {
-                const isJasa = row.isJasaCetak;
-                return (
-                  <tr 
-                    key={row.id || idx} 
-                    className="hover:bg-stone-50/50 transition-colors"
-                  >
-                    <td className="py-3.5 px-4 text-center text-stone-400 font-mono">
-                      {isJasa ? '*' : idx + 1}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-stone-900">
-                      {row.item_description}
-                    </td>
-                    {importSource === 'po' && (
-                      <>
-                        <td className="py-3.5 px-4 text-center font-mono font-bold text-stone-900">
-                          {row.qty || 1}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 bg-amber-50 rounded-md">
-                          {row.uom || 'PCS'}
-                        </td>
-                      </>
-                    )}
-                    <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
-                      {formatRupiah(row.itemDpp)}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
-                      {formatRupiah(row.netTotalPrice)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      {isJasa ? (
-                        <span className="text-stone-300 font-mono text-xs select-none">-</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveStore(idx)}
-                          className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer inline-flex items-center"
-                          title="Delete Row"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {calculatedStoreRows.map((row, idx) => (
+                <tr
+                  key={row.id || idx}
+                  className="hover:bg-stone-50/50 transition-colors"
+                >
+                  <td className="py-3.5 px-4 text-center text-stone-400 font-mono">
+                    {idx + 1}
+                  </td>
+                  <td className="py-3.5 px-4 font-semibold text-stone-900">
+                    {row.item_description || row.store_name}
+                  </td>
+                  {importSource === 'po' && (
+                    <>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-stone-900">
+                        {row.qty || 1}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 bg-amber-50 rounded-md">
+                        {row.uom || 'PCS'}
+                      </td>
+                    </>
+                  )}
+                  <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
+                    {formatRupiah(row.totalFaktur)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                    {formatRupiah(row.dpp)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                    {formatRupiah(row.jasaCetak)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
+                    {formatRupiah(row.pph23)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStore(idx)}
+                      className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer inline-flex items-center"
+                      title="Delete Row"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -387,27 +370,25 @@ export default function CreateInvoicePage() {
 
       {/* Kotak Rekapitulasi Nilai Bawah */}
       <div className="flex justify-end">
-        <div className="bg-white w-full sm:w-80 p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 text-xs">
+        <div className="bg-white w-full sm:w-88 p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 text-xs">
           <div className="flex justify-between items-center text-stone-600">
-            <span>TOTAL:</span>
-            <span className="font-mono font-semibold text-stone-900">{formatRupiah(totalOverall)}</span>
+            <span>TOTAL FAKTUR:</span>
+            <span className="font-mono font-bold text-stone-900">{formatRupiah(totalFakturOverall)}</span>
           </div>
-
-          {isDppActive && (
-            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
-              <span>TOTAL OTHER DPP:</span>
-              <span className="font-mono font-semibold text-stone-900">{formatRupiah(totalDppLain)}</span>
-            </div>
-          )}
 
           <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
-            <span>VAT:</span>
-            <span className="font-mono font-semibold text-stone-900">{formatRupiah(vatAmount)}</span>
+            <span>TOTAL DPP (90%):</span>
+            <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppOverall)}</span>
           </div>
 
-          <div className="flex justify-between items-center text-sm font-bold text-stone-900 border-t border-stone-200 pt-3">
-            <span>GRAND TOTAL:</span>
-            <span className="font-mono font-bold text-stone-900">{formatRupiah(grandTotal)}</span>
+          <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+            <span>TOTAL JASA CETAK (10%):</span>
+            <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalJasaCetakOverall)}</span>
+          </div>
+
+          <div className="flex justify-between items-center text-amber-700 font-semibold border-t border-stone-100 pt-2">
+            <span>TOTAL PPH 23 (30% Jasa):</span>
+            <span className="font-mono font-bold text-amber-700">{formatRupiah(totalPph23Overall)}</span>
           </div>
         </div>
       </div>

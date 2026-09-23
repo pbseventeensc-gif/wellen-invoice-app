@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   Search
 } from 'lucide-react';
-import { calculateNetPrice, formatRupiah } from '@/utils/taxCalculator';
+import { calculateFakturBreakdown, formatRupiah } from '@/utils/taxCalculator';
 
 export default function ImportExcelTab() {
   const router = useRouter();
@@ -86,20 +86,15 @@ export default function ImportExcelTab() {
               commonPromoName = fileNamePromo;
             }
 
-            // 4. Hitung Harga Bruto POS & Potong 11% ke Net Toko
+            // 4. Perhitungan Rumus Baru:
+            // 1. Total Faktur: angka apa adanya dari Excel
+            // 2. DPP = Total Faktur * 0.9
+            // 3. Jasa Cetak = Total Faktur * 0.1
+            // 4. PPH 23 = Jasa Cetak * 0.3
             const rawTotalFaktur = Number(clean['total faktur'] || clean['total'] || clean['total price'] || clean['nilai'] || 0);
+            const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 
-            // Konversi nilai Net Toko (langsung dipotong/dikurangi ke nilai Net Target)
-            let netTotalPrice = rawTotalFaktur;
-            if (rawTotalFaktur === 1810301 || rawTotalFaktur === 1746817) {
-              netTotalPrice = 1601249;
-            } else if (rawTotalFaktur === 1510804 || rawTotalFaktur === 1457823) {
-              netTotalPrice = 1336338;
-            } else if (rawTotalFaktur > 0) {
-              netTotalPrice = calculateNetPrice(rawTotalFaktur);
-            }
-
-            // 5. Pengecekan Duplikasi Ketat (Approved, Approval Queue, & Invoice List / Staging)
+            // 5. Pengecekan Duplikasi Ketat
             const cleanFaktur = noFaktur.toLowerCase();
             const cleanStore = storeName.toLowerCase();
 
@@ -151,12 +146,15 @@ export default function ImportExcelTab() {
               promo_name: fileNamePromo,
               store_name: storeName,
               item_description: storeName,
-              raw_total: rawTotalFaktur,
-              total_price: netTotalPrice,
-              nilai_wpp: netTotalPrice,
-              dpp_11_12: Math.round(netTotalPrice * (11 / 12)),
+              raw_total: breakdown.totalFaktur,
+              total_faktur: breakdown.totalFaktur,
+              total_price: breakdown.totalFaktur,
+              nilai_wpp: breakdown.totalFaktur,
+              dpp: breakdown.dpp,
+              jasa_cetak: breakdown.jasaCetak,
+              pph23: breakdown.pph23,
               qty: 1,
-              unit_price: netTotalPrice,
+              unit_price: breakdown.totalFaktur,
               import_date: currentTimestamp,
               waktu_import: currentTimestamp.slice(0, 10),
               status: isAlreadyApproved ? 'invoiced' : isWaitingApproval ? 'waiting_approval' : 'draft',
@@ -222,9 +220,12 @@ export default function ImportExcelTab() {
       sqm: '-',
       qty: r.qty,
       unit_price: r.unit_price,
-      total_price: r.total_price,
-      nilai_wpp: r.total_price,
-      dpp_11_12: r.dpp_11_12 || Math.round(r.total_price * (11 / 12)),
+      total_faktur: r.total_faktur,
+      total_price: r.total_faktur,
+      nilai_wpp: r.total_faktur,
+      dpp: r.dpp,
+      jasa_cetak: r.jasa_cetak,
+      pph23: r.pph23,
       client_name: detectedClient,
       promo_name: detectedPromo,
       import_date: r.import_date,
@@ -371,7 +372,7 @@ export default function ImportExcelTab() {
 
           <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 z-10 bg-stone-100 text-stone-700 uppercase font-bold text-[10px] border-b border-stone-200 tracking-wider shadow-sm">
+              <thead className="sticky top-0 z-10 bg-stone-100 text-stone-700 uppercase font-bold text-[10px] border-b border-stone-200 tracking-wider shadow-xs">
                 <tr>
                   <th className="py-3 px-3 text-center w-10 bg-stone-100">
                     <button
@@ -388,17 +389,19 @@ export default function ImportExcelTab() {
                     </button>
                   </th>
                   <th className="py-3 px-3 text-center w-10 font-bold bg-stone-100">NO</th>
-                  <th className="py-3 px-4 w-44 font-bold bg-stone-100">INVOICE NO</th>
+                  <th className="py-3 px-4 w-40 font-bold bg-stone-100">INVOICE NO</th>
                   <th className="py-3 px-4 font-bold bg-stone-100">STORE NAME (ITEM DESCRIPTION)</th>
-                  <th className="py-3 px-4 text-right w-36 font-bold bg-stone-100">TOTAL POS<br />(GROSS)</th>
-                  <th className="py-3 px-4 text-right w-36 font-bold bg-stone-100">TOTAL NET<br />(-11%)</th>
+                  <th className="py-3 px-4 text-right w-32 font-bold bg-stone-100">TOTAL FAKTUR</th>
+                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">DPP (90%)</th>
+                  <th className="py-3 px-4 text-right w-32 font-bold bg-stone-100">JASA CETAK (10%)</th>
+                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">PPH 23 (30%)</th>
                   <th className="py-3 px-4 text-center w-16 font-bold bg-stone-100">ACTION</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-normal">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-stone-400 text-xs">
+                    <td colSpan={9} className="py-8 text-center text-stone-400 text-xs">
                       No store data matching the keyword "{searchQuery}"
                     </td>
                   </tr>
@@ -437,7 +440,7 @@ export default function ImportExcelTab() {
                         <td className="py-3 px-3 text-center text-stone-500 font-normal w-10">
                           {idx + 1}
                         </td>
-                        <td className={`py-3 px-4 font-mono font-bold whitespace-nowrap w-44 ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
+                        <td className={`py-3 px-4 font-mono font-bold whitespace-nowrap w-40 ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
                           {row.no_faktur}
                           {isDup && (
                             <span className="block text-[9px] font-bold text-rose-600 tracking-wider">
@@ -448,11 +451,17 @@ export default function ImportExcelTab() {
                         <td className={`py-3 px-4 font-medium tracking-tight ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
                           {row.store_name}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono text-stone-500 line-through decoration-stone-400 whitespace-nowrap w-36">
-                          {formatRupiah(row.raw_total)}
+                        <td className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap w-32 ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
+                          {formatRupiah(row.total_faktur)}
                         </td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap w-36 ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
-                          {formatRupiah(row.total_price)}
+                        <td className="py-3 px-4 text-right font-mono text-stone-700 whitespace-nowrap w-28">
+                          {formatRupiah(row.dpp)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-stone-700 whitespace-nowrap w-32">
+                          {formatRupiah(row.jasa_cetak)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-amber-700 font-semibold whitespace-nowrap w-28">
+                          {formatRupiah(row.pph23)}
                         </td>
                         <td className="py-3 px-4 text-center w-16">
                           <button

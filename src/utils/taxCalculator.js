@@ -3,65 +3,66 @@ export function formatRupiah(number) {
   return 'Rp ' + Math.round(number).toLocaleString('id-ID');
 }
 
-// 1. Ambil nilai bersih dari bruto faktur untuk TOTAL PRICE
-// Contoh: 1.810.301 -> 1.601.249 | 1.510.804 -> 1.336.338
+// Perhitungan Faktur Baru berdasarkan Total Faktur Asli Excel:
+// 1. Total Faktur: angka asli dari excel
+// 2. DPP = Total Faktur * 0.9 (90%)
+// 3. Jasa Cetak = Total Faktur * 0.1 (10%)
+// 4. PPH 23 = Jasa Cetak * 0.3 (30%)
+export function calculateFakturBreakdown(totalFaktur = 0) {
+  const faktur = Number(totalFaktur) || 0;
+  const dpp = Math.round(faktur * 0.9);
+  const jasaCetak = Math.round(faktur * 0.1);
+  const pph23 = Math.round(jasaCetak * 0.3);
+
+  return {
+    totalFaktur: faktur,
+    dpp,
+    jasaCetak,
+    pph23,
+  };
+}
+
+// Deprecated calculation helpers retained for backward compatibility
 export function calculateNetPrice(rawPrice = 0) {
-  const price = Number(rawPrice) || 0;
-  if (price === 0) return 0;
-  return Math.round(price * (1601249 / 1810301));
+  return Number(rawPrice) || 0;
 }
 
-// 2. DPP (11/12) dihitung DARI Total Price
 export function calculateDpp(totalPrice = 0) {
-  return Math.round((Number(totalPrice) || 0) * (11 / 12));
+  return Math.round((Number(totalPrice) || 0) * 0.9);
 }
 
-// 3. Kalkulasi invoice utuh
 export function calculateInvoiceTotals(items = []) {
-  let calculatedItems = [];
-  let subtotalStores = 0;
+  let totalFaktur = 0;
+  let totalDpp = 0;
+  let totalJasaCetak = 0;
+  let totalPph23 = 0;
 
-  // Filter toko utama (selain Jasa Cetak)
-  const storeItems = items.filter((it) => !it.isJasaCetak);
+  const calculatedItems = items.map((item) => {
+    const rawVal = Number(item.total_faktur || item.total_price || item.raw_total || item.nilai_wpp) || 0;
+    const breakdown = calculateFakturBreakdown(rawVal);
 
-  storeItems.forEach((item) => {
-    const qty = Number(item.qty) || 1;
-    // Nilai ini adalah TOTAL PRICE
-    const netTotalPrice = (Number(item.total_price || item.nilai_wpp || item.unit_price) || 0) * qty;
-    // DPP adalah 11/12 DARI Total Price
-    const dppItem = Math.round(netTotalPrice * (11 / 12));
+    totalFaktur += breakdown.totalFaktur;
+    totalDpp += breakdown.dpp;
+    totalJasaCetak += breakdown.jasaCetak;
+    totalPph23 += breakdown.pph23;
 
-    subtotalStores += netTotalPrice;
-
-    calculatedItems.push({
+    return {
       ...item,
-      total_price: netTotalPrice,
-      dpp_11_12: dppItem,
-    });
+      total_faktur: breakdown.totalFaktur,
+      total_price: breakdown.totalFaktur,
+      dpp: breakdown.dpp,
+      jasa_cetak: breakdown.jasaCetak,
+      pph23: breakdown.pph23,
+    };
   });
-
-  // Jasa Cetak: Total Price = Subtotal / 9, DPP = Total Jasa Cetak * (11/12)
-  const jasaCetakPrice = subtotalStores > 0 ? Math.round(subtotalStores / 9) : 0;
-  const jasaCetakDpp = Math.round(jasaCetakPrice * (11 / 12));
-
-  calculatedItems.push({
-    id: 'row-jasa-cetak',
-    item_description: 'JASA CETAK',
-    total_price: jasaCetakPrice,
-    dpp_11_12: jasaCetakDpp,
-    isJasaCetak: true,
-  });
-
-  const totalOverall = calculatedItems.reduce((acc, it) => acc + it.total_price, 0);
-  const totalDppLain = calculatedItems.reduce((acc, it) => acc + it.dpp_11_12, 0);
-  const vatAmount = Math.round(totalOverall * 0.11);
-  const grandTotal = totalOverall + vatAmount;
 
   return {
     items: calculatedItems,
-    totalHargaNet: totalOverall,
-    dppLain: totalDppLain,
-    ppnAmount: vatAmount,
-    grandTotal: grandTotal,
+    totalFaktur,
+    totalHargaNet: totalFaktur,
+    totalDpp,
+    totalJasaCetak,
+    totalPph23,
+    grandTotal: totalFaktur,
   };
 }
