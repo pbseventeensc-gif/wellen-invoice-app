@@ -111,10 +111,8 @@ export default function CreateInvoicePage() {
   const totalJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.jasaCetak, 0);
   const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
 
-  // Perhitungan VAT & Grand Total berdasarkan opsi DPP ON/OFF
-  const vatAmount = isDppActive
-    ? Math.round(totalDppOverall * 0.11)
-    : Math.round(totalFakturOverall * 0.11);
+  // Perhitungan VAT 11% dari (Total DPP + Total Jasa Cetak)
+  const vatAmount = Math.round((totalDppOverall + totalJasaCetakOverall) * 0.11);
   const grandTotal = totalFakturOverall + vatAmount;
 
   // Submit ke Antrean Approval
