@@ -311,9 +311,9 @@ export default function CreateInvoicePage() {
                   </>
                 )}
                 <th className="py-3 px-4 text-right w-36 font-semibold">TOTAL FAKTUR</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">DPP (90%)</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">JASA CETAK (10%)</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">PPH 23 (30%)</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">DPP</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">JASA CETAK</th>
+                <th className="py-3 px-4 text-right w-36 font-semibold">PPH 23</th>
                 <th className="py-3 px-4 text-center w-16 font-semibold">ACTION</th>
               </tr>
             </thead>
@@ -377,17 +377,17 @@ export default function CreateInvoicePage() {
           </div>
 
           <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
-            <span>TOTAL DPP (90%):</span>
+            <span>TOTAL DPP:</span>
             <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppOverall)}</span>
           </div>
 
           <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
-            <span>TOTAL JASA CETAK (10%):</span>
+            <span>TOTAL JASA CETAK:</span>
             <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalJasaCetakOverall)}</span>
           </div>
 
           <div className="flex justify-between items-center text-amber-700 font-semibold border-t border-stone-100 pt-2">
-            <span>TOTAL PPH 23 (30% Jasa):</span>
+            <span>TOTAL PPH 23:</span>
             <span className="font-mono font-bold text-amber-700">{formatRupiah(totalPph23Overall)}</span>
           </div>
         </div>

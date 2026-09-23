@@ -392,9 +392,9 @@ export default function ImportExcelTab() {
                   <th className="py-3 px-4 w-40 font-bold bg-stone-100">INVOICE NO</th>
                   <th className="py-3 px-4 font-bold bg-stone-100">STORE NAME (ITEM DESCRIPTION)</th>
                   <th className="py-3 px-4 text-right w-32 font-bold bg-stone-100">TOTAL FAKTUR</th>
-                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">DPP (90%)</th>
-                  <th className="py-3 px-4 text-right w-32 font-bold bg-stone-100">JASA CETAK (10%)</th>
-                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">PPH 23 (30%)</th>
+                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">DPP</th>
+                  <th className="py-3 px-4 text-right w-32 font-bold bg-stone-100">JASA CETAK</th>
+                  <th className="py-3 px-4 text-right w-28 font-bold bg-stone-100">PPH 23</th>
                   <th className="py-3 px-4 text-center w-16 font-bold bg-stone-100">ACTION</th>
                 </tr>
               </thead>
