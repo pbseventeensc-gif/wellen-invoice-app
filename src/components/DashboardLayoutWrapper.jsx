@@ -10,8 +10,8 @@ import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export default function DashboardLayoutWrapper({ children }) {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState(null);
-  const [loadingRole, setLoadingRole] = useState(true);
+  const [userRole, setUserRole] = useState('Super Admin');
+  const [loadingRole, setLoadingRole] = useState(false);
 
   const isAuthPage = pathname === '/login' || pathname === '/forgot-password' || pathname === '/reset-password';
 
@@ -31,12 +31,12 @@ export default function DashboardLayoutWrapper({ children }) {
             .eq('id', user.id)
             .maybeSingle();
 
-          setUserRole(data?.role || 'AR Created');
+          setUserRole(data?.role || 'Super Admin');
         } else {
-          setUserRole('AR Created');
+          setUserRole('Super Admin');
         }
       } catch (e) {
-        setUserRole('AR Created');
+        setUserRole('Super Admin');
       } finally {
         setLoadingRole(false);
       }

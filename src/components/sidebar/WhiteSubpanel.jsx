@@ -24,7 +24,7 @@ export default function WhiteSubpanel() {
   const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
   const [profile, setProfile] = useState({
     name: 'Admin',
-    role: 'AR Created',
+    role: 'Super Admin',
   });
 
   const updateApprovedCount = () => {
