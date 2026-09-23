@@ -90,7 +90,7 @@ export default function ImportExcelTab() {
             // 1. Total Faktur: angka apa adanya dari Excel
             // 2. DPP = Total Faktur * 0.9
             // 3. Jasa Cetak = Total Faktur * 0.1
-            // 4. PPH 23 = Jasa Cetak * 0.3
+            // 4. PPH 23 = Jasa Cetak * 0.2
             const rawTotalFaktur = Number(clean['total faktur'] || clean['total'] || clean['total price'] || clean['nilai'] || 0);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 

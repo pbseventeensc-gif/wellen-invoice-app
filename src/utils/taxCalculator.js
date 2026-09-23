@@ -7,12 +7,12 @@ export function formatRupiah(number) {
 // 1. Total Faktur: angka asli dari excel
 // 2. DPP = Total Faktur * 0.9 (90%)
 // 3. Jasa Cetak = Total Faktur * 0.1 (10%)
-// 4. PPH 23 = Jasa Cetak * 0.3 (30%)
+// 4. PPH 23 = Jasa Cetak * 0.2
 export function calculateFakturBreakdown(totalFaktur = 0) {
   const faktur = Number(totalFaktur) || 0;
   const dpp = Math.round(faktur * 0.9);
   const jasaCetak = Math.round(faktur * 0.1);
-  const pph23 = Math.round(jasaCetak * 0.3);
+  const pph23 = Math.round(jasaCetak * 0.2);
 
   return {
     totalFaktur: faktur,
