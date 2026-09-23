@@ -397,11 +397,6 @@ export default function CreateInvoicePage() {
             <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalJasaCetakOverall)}</span>
           </div>
 
-          <div className="flex justify-between items-center text-amber-700 font-semibold border-t border-stone-100 pt-2">
-            <span>TOTAL PPH 23:</span>
-            <span className="font-mono font-bold text-amber-700">{formatRupiah(totalPph23Overall)}</span>
-          </div>
-
           <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
             <span>VAT:</span>
             <span className="font-mono font-semibold text-stone-900">{formatRupiah(vatAmount)}</span>
