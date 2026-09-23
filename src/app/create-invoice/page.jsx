@@ -111,6 +111,12 @@ export default function CreateInvoicePage() {
   const totalJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.jasaCetak, 0);
   const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
 
+  // Perhitungan VAT & Grand Total berdasarkan opsi DPP ON/OFF
+  const vatAmount = isDppActive
+    ? Math.round(totalDppOverall * 0.11)
+    : Math.round(totalFakturOverall * 0.11);
+  const grandTotal = totalFakturOverall + vatAmount;
+
   // Submit ke Antrean Approval
   const handleSubmitApproval = () => {
     if (stores.length === 0) {
@@ -135,6 +141,8 @@ export default function CreateInvoicePage() {
       total_jasa_cetak: totalJasaCetakOverall,
       total_pph23: totalPph23Overall,
       dpp_lain: totalDppOverall,
+      ppn_amount: vatAmount,
+      grand_total: grandTotal,
       time_created: new Date().toISOString().slice(0, 16).replace('T', ' '),
       status: 'waiting_approval',
       importSource: importSource,
@@ -368,18 +376,21 @@ export default function CreateInvoicePage() {
         </div>
       </div>
 
-      {/* Kotak Rekapitulasi Nilai Bawah */}
+      {/* Kotak Rekapitulasi Nilai Bawah (Sesuai Opsi DPP ON/OFF & Urutan Gambar) */}
       <div className="flex justify-end">
         <div className="bg-white w-full sm:w-88 p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 text-xs">
           <div className="flex justify-between items-center text-stone-600">
-            <span>TOTAL FAKTUR:</span>
+            <span>TOTAL:</span>
             <span className="font-mono font-bold text-stone-900">{formatRupiah(totalFakturOverall)}</span>
           </div>
 
-          <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
-            <span>TOTAL DPP:</span>
-            <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppOverall)}</span>
-          </div>
+          {/* TOTAL DPP LAIN-LAIN hanya tampil jika DPP Radio = ON */}
+          {isDppActive && (
+            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+              <span>TOTAL DPP LAIN-LAIN:</span>
+              <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppOverall)}</span>
+            </div>
+          )}
 
           <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
             <span>TOTAL JASA CETAK:</span>
@@ -389,6 +400,16 @@ export default function CreateInvoicePage() {
           <div className="flex justify-between items-center text-amber-700 font-semibold border-t border-stone-100 pt-2">
             <span>TOTAL PPH 23:</span>
             <span className="font-mono font-bold text-amber-700">{formatRupiah(totalPph23Overall)}</span>
+          </div>
+
+          <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+            <span>VAT:</span>
+            <span className="font-mono font-semibold text-stone-900">{formatRupiah(vatAmount)}</span>
+          </div>
+
+          <div className="flex justify-between items-center text-sm font-bold text-stone-900 border-t border-stone-200 pt-3">
+            <span>GRAND TOTAL:</span>
+            <span className="font-mono font-bold text-amber-600">{formatRupiah(grandTotal)}</span>
           </div>
         </div>
       </div>
