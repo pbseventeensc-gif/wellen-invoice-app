@@ -279,36 +279,45 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
 
               {/* Sisi Kanan: Authorized Sign & Stempel + Tanda Tangan SVG */}
               <div className="flex flex-col items-center justify-end text-center relative h-28 pb-1">
-                {/* 1. Stempel SVG */}
-                <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
-                  <Image
-                    src="/stempel.svg"
-                    alt="Stempel Wellen Brothers"
-                    fill
-                    sizes="128px"
-                    className="object-contain mix-blend-multiply"
-                  />
-                </div>
-
-                {/* 2. Tanda Tangan Digital Otomatis (Tanita.svg vs risca.svg) */}
                 {(() => {
+                  const isApproved =
+                    invoice.status === 'approved' ||
+                    Boolean(invoice.approved_by) ||
+                    Boolean(invoice.time_approved);
+
+                  if (!isApproved) return null;
+
                   const approverName = String(
-                    invoice.approved_by || invoice.approver_name || invoice.created_by || invoice.ar_name || ''
+                    invoice.approved_by || invoice.approver_name || ''
                   ).toLowerCase();
                   const isTanita = approverName.includes('tanita');
                   const sigSrc = isTanita ? '/Tanita.svg' : '/risca.svg';
                   const sigAlt = isTanita ? 'Tanda Tangan Digital Tanita' : 'Tanda Tangan Digital Risca';
 
                   return (
-                    <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
-                      <Image
-                        src={sigSrc}
-                        alt={sigAlt}
-                        fill
-                        sizes="112px"
-                        className="object-contain mix-blend-multiply"
-                      />
-                    </div>
+                    <>
+                      {/* 1. Stempel SVG */}
+                      <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
+                        <Image
+                          src="/stempel.svg"
+                          alt="Stempel Wellen Brothers"
+                          fill
+                          sizes="128px"
+                          className="object-contain mix-blend-multiply"
+                        />
+                      </div>
+
+                      {/* 2. Tanda Tangan Digital Otomatis (Tanita.svg vs risca.svg) */}
+                      <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
+                        <Image
+                          src={sigSrc}
+                          alt={sigAlt}
+                          fill
+                          sizes="112px"
+                          className="object-contain mix-blend-multiply"
+                        />
+                      </div>
+                    </>
                   );
                 })()}
 
