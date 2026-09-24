@@ -39,6 +39,7 @@ const DEFAULT_APPROVED = [
     discountJasaCetak: -326399,
     ar_name: 'FAHADA',
     time_created: '2026-09-10 12:00',
+    time_approved: '2026-09-10 12:00',
     time_download: null,
     status: 'approved',
     items: [
@@ -62,6 +63,7 @@ const DEFAULT_APPROVED = [
     discountJasaCetak: -32778,
     ar_name: 'FAHADA',
     time_created: '2026-08-28 10:30',
+    time_approved: '2026-08-28 10:30',
     time_download: null,
     status: 'approved',
     items: [
@@ -151,6 +153,9 @@ export default function ApprovedInvoicesPage() {
       if (sortField === 'invoice_date') {
         valA = a.invoice_date || a.time_created || '';
         valB = b.invoice_date || b.time_created || '';
+      } else if (sortField === 'time_approved' || sortField === 'time_download') {
+        valA = a.time_approved || a.time_created || a.time_download || '';
+        valB = b.time_approved || b.time_created || b.time_download || '';
       } else if (sortField === 'total_harga_net') {
         valA = Number(a.total_harga_net || a.totalBersih || 0);
         valB = Number(b.total_harga_net || b.totalBersih || 0);
@@ -227,7 +232,7 @@ export default function ApprovedInvoicesPage() {
       'Client / PT': inv.client_name,
       'Promo / Material': inv.promo_name || '-',
       Created: inv.ar_name || inv.created_by || 'FAHADA',
-      'Download Time': inv.time_download || 'Not Downloaded',
+      'Approval Time': inv.time_approved || inv.time_created || '-',
       'Payment Settlement Status': inv.payment_status === 'paid' ? `Lunas (${inv.payment_date || '-'})` : 'Belum Lunas (Unpaid)',
       'Net Value': inv.total_harga_net || inv.totalBersih || 0,
       'VAT': inv.ppn_amount || 0,
@@ -430,13 +435,13 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header Download Timestamp */}
+                {/* Header Approved Timestamp */}
                 <th 
-                  onClick={() => handleSort('time_download')}
+                  onClick={() => handleSort('time_approved')}
                   className="py-3.5 px-4 text-center w-36 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
                   <div className="inline-flex items-center gap-1">
-                    <span>DOWNLOAD</span>
+                    <span>APPROVE</span>
                     <ArrowUpDown size={12} className="text-stone-400" />
                   </div>
                 </th>
@@ -502,15 +507,15 @@ export default function ApprovedInvoicesPage() {
                         {row.ar_name || row.created_by || 'FAHADA'}
                       </td>
 
-                      {/* Kolom Download Timestamp */}
+                      {/* Kolom Approved Timestamp */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {row.time_download ? (
+                        {row.time_approved || row.time_created ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            <Download size={11} /> {row.time_download}
+                            <Clock size={11} /> {row.time_approved || row.time_created}
                           </span>
                         ) : (
                           <span className="text-[11px] font-mono text-stone-400 italic">
-                            Not downloaded yet
+                            -
                           </span>
                         )}
                       </td>
