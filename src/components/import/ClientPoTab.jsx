@@ -43,11 +43,16 @@ export default function ClientPoTab() {
 
   const handleLoadRemainingBatch = () => {
     if (!remainingBatch) return;
-    setPoClientName(remainingBatch.client_name || 'PT. Foods Beverages Indonesia');
+    setPoClientName(String(remainingBatch.client_name || 'PT. FOODS BEVERAGES INDONESIA').toUpperCase());
     setPoNumber(remainingBatch.po_number || 'WPP-4607477988');
     setPoDate(remainingBatch.po_date || new Date().toISOString().slice(0, 10));
-    setPoPromoName(remainingBatch.promo_name || 'PURCHASE ORDER MATERIAL & JASA');
-    setPoItems(remainingBatch.remaining_items || []);
+    setPoPromoName(String(remainingBatch.promo_name || 'PURCHASE ORDER MATERIAL & JASA').toUpperCase());
+    setPoItems(
+      (remainingBatch.remaining_items || []).map((it) => ({
+        ...it,
+        description: String(it.description || '').toUpperCase(),
+      }))
+    );
     setPoFileName(`PO_REMAINING_${remainingBatch.po_number || 'PO'}.pdf`);
   };
 
@@ -79,42 +84,46 @@ export default function ClientPoTab() {
     setPoIncludeJasaCetak(false);
   };
 
-  // Handler Upload File PO PDF / Gambar
+  // Handler Upload File PO PDF / Gambar (Data Seragam KAPITAL & Tanpa Terpotong)
   const handlePoFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setPoFileName(file.name);
-    setPoClientName('PT. Foods Beverages Indonesia');
+    setPoClientName('PT. FOODS BEVERAGES INDONESIA');
     setPoNumber(`WPP-${Date.now().toString().slice(-8)}`);
     setPoDate(new Date().toISOString().slice(0, 10));
     setPoPromoName('PURCHASE ORDER MATERIAL & JASA');
-    setPoItems([
-      { id: 'po-1', description: 'ART CARTON 260 GSM 15X21 CM PRINT 1 SI', qty: 4, uom: 'EA', unit_price: 1748, isJasaCetak: false },
-      { id: 'po-2', description: 'Stc Vynil A3 Lam Doff (Ptg Bentuk)', qty: 1, uom: 'M2', unit_price: 23477, isJasaCetak: false },
-      { id: 'po-3', description: 'Foamboard Non Print (Ptg Bentuk)', qty: 1, uom: 'M2', unit_price: 23865, isJasaCetak: false },
-      { id: 'po-4', description: 'Stick Kayu Silindar Bulat', qty: 3, uom: 'EA', unit_price: 33300, isJasaCetak: false },
-      { id: 'po-5', description: 'Impraboard + Stc Ritrama Lam Doff (Ptg Kotak)', qty: 1, uom: 'M2', unit_price: 33716, isJasaCetak: false },
+
+    const defaultItems = [
+      { id: 'po-1', description: 'ART CARTON 260 GSM 15X21 CM PRINT 1 SISI PTG KOTAK', qty: 4, uom: 'EA', unit_price: 1748, isJasaCetak: false },
+      { id: 'po-2', description: 'STC VYNIL A3 LAM DOFF (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23477, isJasaCetak: false },
+      { id: 'po-3', description: 'FOAMBOARD NON PRINT (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23865, isJasaCetak: false },
+      { id: 'po-4', description: 'STICK KAYU SILINDAR BULAT', qty: 3, uom: 'EA', unit_price: 33300, isJasaCetak: false },
+      { id: 'po-5', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 33716, isJasaCetak: false },
       { id: 'po-6', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 35964, isJasaCetak: false },
-      { id: 'po-7', description: 'PVC Foamboard + Stc (Ptg Bentuk)', qty: 1, uom: 'M2', unit_price: 53676, isJasaCetak: false },
-      { id: 'po-8', description: 'Stc Ritrama Lam Doff (Ptg Kotak)', qty: 2.34, uom: 'M2', unit_price: 69930, isJasaCetak: false },
-      { id: 'po-9', description: 'Jasa cetak', qty: 1, uom: 'EA', unit_price: 112643, isJasaCetak: true },
+      { id: 'po-7', description: 'PVC FOAMBOARD + STC (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 53676, isJasaCetak: false },
+      { id: 'po-8', description: 'STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 2.34, uom: 'M2', unit_price: 69930, isJasaCetak: false },
+      { id: 'po-9', description: 'JASA CETAK', qty: 1, uom: 'EA', unit_price: 112643, isJasaCetak: true },
       { id: 'po-10', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 1.42, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-11', description: 'Impraboard + Stc Ritrama Lam Doff (Ptg Bentuk)', qty: 2.31, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-12', description: 'Stc Oracal Solid Black (Ptg Bentuk)', qty: 1, uom: 'M2', unit_price: 191375, isJasaCetak: false },
-      { id: 'po-13', description: 'PVC Board + Stc Ritrama Lam Doff (Ptg Kotak)', qty: 1.23, uom: 'M2', unit_price: 239760, isJasaCetak: false },
-      { id: 'po-14', description: 'Jasa Pasang Visual', qty: 1, uom: 'EA', unit_price: 558885, isJasaCetak: true },
-    ]);
+      { id: 'po-11', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 2.31, uom: 'M2', unit_price: 149850, isJasaCetak: false },
+      { id: 'po-12', description: 'STC ORACAL SOLID BLACK (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 191375, isJasaCetak: false },
+      { id: 'po-13', description: 'PVC BOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1.23, uom: 'M2', unit_price: 239760, isJasaCetak: false },
+      { id: 'po-14', description: 'JASA PASANG VISUAL', qty: 1, uom: 'EA', unit_price: 558885, isJasaCetak: false },
+    ];
+
+    setPoItems(defaultItems);
+    setSelectedPoIds(defaultItems.map((item) => item.id));
   };
 
-  // Tambah Baris PO Item Baru
+  // Tambah Baris PO Item Baru (Otomatis Kapital)
   const handleAddPoItem = () => {
     const newItemId = `po-${Date.now()}-${poItems.length + 1}`;
     setPoItems((prev) => [
       ...prev,
       {
         id: newItemId,
-        description: 'New Material / Service Item',
+        description: 'NEW MATERIAL / SERVICE ITEM',
         qty: 1,
         uom: 'M2',
         unit_price: 50000,
@@ -124,17 +133,16 @@ export default function ClientPoTab() {
     setSelectedPoIds((prev) => [...prev, newItemId]);
   };
 
-  // Update Item PO
+  // Update Item PO (Otomatis Kapital)
   const handleUpdatePoItem = (id, field, val) => {
     setPoItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const updated = { ...item, [field]: val };
+          const finalVal = field === 'description' ? String(val).toUpperCase() : val;
+          const updated = { ...item, [field]: finalVal };
           if (field === 'description') {
-            const lower = String(val).toLowerCase();
-            if (lower.includes('jasa cetak') || lower.includes('jasa pasang')) {
-              updated.isJasaCetak = true;
-            }
+            const cleanDesc = String(val).toLowerCase().trim();
+            updated.isJasaCetak = cleanDesc === 'jasa cetak';
           }
           return updated;
         }
@@ -162,21 +170,22 @@ export default function ClientPoTab() {
       const q = Number(r.qty) || 1;
       const p = Number(r.unit_price) || 0;
       const totalPrice = Math.round(q * p);
+      const cleanDesc = String(r.description || '').toUpperCase();
 
       return {
         id: r.id,
         no_faktur: poNumber || `WPP-${Date.now().toString().slice(-8)}`,
         wpp_number: poNumber || `WPP-${Date.now().toString().slice(-8)}`,
-        item_description: r.description,
-        store_name: r.description,
+        item_description: cleanDesc,
+        store_name: cleanDesc,
         qty: q,
         uom: r.uom || 'PCS',
         unit_price: p,
         total_price: totalPrice,
         nilai_wpp: totalPrice,
         dpp_11_12: Math.round(totalPrice * (11 / 12)),
-        client_name: poClientName || 'PT. Foods Beverages Indonesia',
-        promo_name: poPromoName || 'PURCHASE ORDER MATERIAL & JASA',
+        client_name: String(poClientName || 'PT. FOODS BEVERAGES INDONESIA').toUpperCase(),
+        promo_name: String(poPromoName || 'PURCHASE ORDER MATERIAL & JASA').toUpperCase(),
         invoice_date: poDate || new Date().toISOString().slice(0, 10),
         isJasaCetak: r.isJasaCetak || false,
         status: 'waiting_approval',
@@ -187,23 +196,26 @@ export default function ClientPoTab() {
     const unselectedRows = poItems.filter((r) => !selectedPoIds.includes(r.id));
     if (unselectedRows.length > 0) {
       try {
-        const remainingForStaging = unselectedRows.map((r, idx) => ({
-          id: r.id || `po-rem-${Date.now()}-${idx}`,
-          no_faktur: poNumber || `WPP-PO-${Date.now().toString().slice(-6)}`,
-          wpp_number: poNumber || `WPP-PO-${Date.now().toString().slice(-6)}`,
-          client_name: poClientName || 'PT. Foods Beverages Indonesia',
-          promo_name: poPromoName || 'PURCHASE ORDER MATERIAL & JASA',
-          store_name: r.description,
-          item_description: r.description,
-          qty: Number(r.qty) || 1,
-          uom: r.uom || 'PCS',
-          unit_price: Number(r.unit_price) || 0,
-          total_price: Math.round((Number(r.qty) || 1) * (Number(r.unit_price) || 0)),
-          nilai_wpp: Math.round((Number(r.qty) || 1) * (Number(r.unit_price) || 0)),
-          import_date: new Date().toISOString(),
-          status: 'ready',
-          isJasaCetak: r.isJasaCetak || false,
-        }));
+        const remainingForStaging = unselectedRows.map((r, idx) => {
+          const cleanDesc = String(r.description || '').toUpperCase();
+          return {
+            id: r.id || `po-rem-${Date.now()}-${idx}`,
+            no_faktur: poNumber || `WPP-PO-${Date.now().toString().slice(-6)}`,
+            wpp_number: poNumber || `WPP-PO-${Date.now().toString().slice(-6)}`,
+            client_name: String(poClientName || 'PT. FOODS BEVERAGES INDONESIA').toUpperCase(),
+            promo_name: String(poPromoName || 'PURCHASE ORDER MATERIAL & JASA').toUpperCase(),
+            store_name: cleanDesc,
+            item_description: cleanDesc,
+            qty: Number(r.qty) || 1,
+            uom: r.uom || 'PCS',
+            unit_price: Number(r.unit_price) || 0,
+            total_price: Math.round((Number(r.qty) || 1) * (Number(r.unit_price) || 0)),
+            nilai_wpp: Math.round((Number(r.qty) || 1) * (Number(r.unit_price) || 0)),
+            import_date: new Date().toISOString(),
+            status: 'ready',
+            isJasaCetak: r.isJasaCetak || false,
+          };
+        });
 
         const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
         const updatedStaging = [
@@ -213,11 +225,14 @@ export default function ClientPoTab() {
         localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
 
         localStorage.setItem('wellen_po_remaining_items', JSON.stringify({
-          client_name: poClientName,
+          client_name: String(poClientName).toUpperCase(),
           po_number: poNumber,
           po_date: poDate,
-          promo_name: poPromoName,
-          remaining_items: unselectedRows,
+          promo_name: String(poPromoName).toUpperCase(),
+          remaining_items: unselectedRows.map((it) => ({
+            ...it,
+            description: String(it.description).toUpperCase(),
+          })),
         }));
 
         window.dispatchEvent(new Event('storage'));
@@ -283,7 +298,7 @@ export default function ClientPoTab() {
       {/* Header Metadata PO Form */}
       <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-2 text-stone-900 font-bold text-sm">
+          <div className="flex items-center gap-2 text-stone-900 font-bold text-sm uppercase">
             <FileText size={18} className="text-amber-500" />
             <span>Client Purchase Order (PO Header Details)</span>
           </div>
@@ -306,9 +321,9 @@ export default function ClientPoTab() {
             <input
               type="text"
               value={poClientName}
-              onChange={(e) => setPoClientName(e.target.value)}
-              placeholder="e.g. PT. Foods Beverages Indonesia"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 outline-none focus:border-amber-500"
+              onChange={(e) => setPoClientName(e.target.value.toUpperCase())}
+              placeholder="e.g. PT. FOODS BEVERAGES INDONESIA"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 uppercase outline-none focus:border-amber-500"
             />
           </div>
 
@@ -319,9 +334,9 @@ export default function ClientPoTab() {
             <input
               type="text"
               value={poNumber}
-              onChange={(e) => setPoNumber(e.target.value)}
+              onChange={(e) => setPoNumber(e.target.value.toUpperCase())}
               placeholder="e.g. WPP-4607477988"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 uppercase outline-none focus:border-amber-500"
             />
           </div>
 
@@ -345,9 +360,9 @@ export default function ClientPoTab() {
             <input
               type="text"
               value={poPromoName}
-              onChange={(e) => setPoPromoName(e.target.value)}
+              onChange={(e) => setPoPromoName(e.target.value.toUpperCase())}
               placeholder="e.g. PURCHASE ORDER MATERIAL & JASA"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-900 outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-900 uppercase outline-none focus:border-amber-500"
             />
           </div>
         </div>
@@ -356,7 +371,7 @@ export default function ClientPoTab() {
       {/* Dynamic Line-Item Builder Table */}
       <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 font-bold text-stone-900">
+          <div className="flex items-center gap-2 font-bold text-stone-900 uppercase">
             <Layers size={16} className="text-amber-500" />
             <span>PO Material & Line-Item Breakdown ({poItems.length} Items)</span>
           </div>
@@ -420,11 +435,11 @@ export default function ClientPoTab() {
                       <td className="py-2.5 px-3 text-center font-mono text-stone-400">{idx + 1}</td>
 
                       <td className="py-2.5 px-3">
-                        <input
-                          type="text"
+                        <textarea
+                          rows={1}
                           value={item.description}
                           onChange={(e) => handleUpdatePoItem(item.id, 'description', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-medium text-stone-900 outline-none focus:border-amber-500 focus:bg-white"
+                          className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-stone-900 uppercase outline-none focus:border-amber-500 focus:bg-white resize-y min-h-[34px] leading-relaxed"
                         />
                       </td>
 
@@ -442,7 +457,7 @@ export default function ClientPoTab() {
                         <select
                           value={item.uom || 'M2'}
                           onChange={(e) => handleUpdatePoItem(item.id, 'uom', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-center text-stone-800 outline-none focus:border-amber-500 cursor-pointer"
+                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-center text-stone-800 uppercase outline-none focus:border-amber-500 cursor-pointer"
                         >
                           <option value="M2">M²</option>
                           <option value="EA">EA</option>

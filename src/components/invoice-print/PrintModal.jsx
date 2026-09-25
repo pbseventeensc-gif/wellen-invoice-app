@@ -126,7 +126,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             {/* Info Klien */}
             <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-300">
               <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-0.5">
-                INVOICE TO:
+                BILL TO:
               </span>
               <p className="font-bold text-black text-xs">{invoice.client_name}</p>
               <p className="text-black text-[11px] whitespace-pre-line mt-0.5 font-medium leading-relaxed">
@@ -135,69 +135,97 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             </div>
 
             {/* Tabel Rincian Barang */}
-            <table className="w-full text-left border-collapse border border-stone-400 text-xs">
-              <thead className="bg-stone-200 border-b border-stone-400">
-                <tr>
-                  <th className="py-2 px-3 border-r border-stone-400 w-10 text-center text-black font-bold">No</th>
-                  <th className="py-2 px-3 border-r border-stone-400 text-black font-bold">ITEM DESCRIPTION</th>
-                  <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">QTY</th>
-                  <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">UOM</th>
-                  <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-300 font-medium">
-                {invoice.items?.map((it, idx) => {
-                  const descriptionText = 
-                    it.item_description || 
-                    it.description || 
-                    it.item_name || 
-                    it.product_name || 
-                    it.name || 
-                    it.title || 
-                    it.text || 
-                    it.jasa_cetak || 
-                    '-';
+            {(() => {
+              const isPoSource = invoice.importSource === 'po' || invoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
 
-                  return (
-                    <tr key={it.id || idx}>
-                      <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">{idx + 1}</td>
-                      <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">
-                        {descriptionText}
-                      </td>
-                      <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">
-                        {it.qty || 1}
-                      </td>
-                      <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">
-                        {it.uom || 'PCS'}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono text-black font-bold">{formatRupiah(it.total_price || it.price || 0)}</td>
+              return (
+                <table className="w-full text-left border-collapse border border-stone-400 text-xs">
+                  <thead className="bg-stone-200 border-b border-stone-400">
+                    <tr>
+                      <th className="py-2 px-3 border-r border-stone-400 w-10 text-center text-black font-bold">No</th>
+                      <th className="py-2 px-3 border-r border-stone-400 text-black font-bold">ITEM DESCRIPTION</th>
+                      {isPoSource && (
+                        <>
+                          <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">QTY</th>
+                          <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">UOM</th>
+                        </>
+                      )}
+                      <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
                     </tr>
-                  );
-                })}
+                  </thead>
+                  <tbody className="divide-y divide-stone-300 font-medium">
+                    {invoice.items?.map((it, idx) => {
+                      const descriptionText =
+                        it.item_description ||
+                        it.description ||
+                        it.item_name ||
+                        it.product_name ||
+                        it.name ||
+                        it.title ||
+                        it.text ||
+                        it.jasa_cetak ||
+                        '-';
 
-                {(() => {
-                  const hasJasaCetak = invoice.items?.some(
-                    (it) => it.isJasaCetak || (it.item_description || it.description || '').toUpperCase() === 'JASA CETAK'
-                  );
-                  const jasaVal = invoice.discountJasaCetak || invoice.jasaCetak || invoice.discount_jasa_cetak || 0;
+                      return (
+                        <tr key={it.id || idx}>
+                          <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">{idx + 1}</td>
+                          <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">
+                            {descriptionText}
+                          </td>
+                          {isPoSource && (
+                            <>
+                              <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">
+                                {it.qty || 1}
+                              </td>
+                              <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">
+                                {it.uom || 'PCS'}
+                              </td>
+                            </>
+                          )}
+                          <td className="py-2 px-3 text-right font-mono text-black font-bold">{formatRupiah(it.total_price || it.price || 0)}</td>
+                        </tr>
+                      );
+                    })}
 
-                  if (!hasJasaCetak && jasaVal !== 0) {
-                    return (
-                      <tr className="bg-stone-50/50">
-                        <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">*</td>
-                        <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">JASA CETAK</td>
-                        <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">1</td>
-                        <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">PCS</td>
-                        <td className="py-2 px-3 text-right font-mono text-black font-bold">
-                          {formatRupiah(Math.abs(jasaVal))}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  return null;
-                })()}
-              </tbody>
-            </table>
+                    {(() => {
+                      const hasJasaCetakRow = invoice.items?.some(
+                        (it) => (it.item_description || it.description || it.store_name || '').toUpperCase() === 'JASA CETAK'
+                      );
+                      const jasaVal =
+                        Number(
+                          invoice.total_jasa_cetak ??
+                          invoice.totalJasaCetak ??
+                          invoice.discountJasaCetak ??
+                          invoice.discount_jasa_cetak ??
+                          invoice.jasaCetak ??
+                          0
+                        ) ||
+                        invoice.items?.reduce((sum, it) => sum + (Number(it.jasa_cetak) || 0), 0) ||
+                        0;
+
+                      if (!hasJasaCetakRow && jasaVal > 0) {
+                        return (
+                          <tr className="bg-stone-50/50">
+                            <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">*</td>
+                            <td className="py-2 px-3 border-r border-stone-300 font-bold text-black">JASA CETAK</td>
+                            {isPoSource && (
+                              <>
+                                <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">1</td>
+                                <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">PCS</td>
+                              </>
+                            )}
+                            <td className="py-2 px-3 text-right font-mono text-black font-bold">
+                              {formatRupiah(jasaVal)}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
 
           {/* Bagian Bawah: Diturunkan Otomatis (mt-auto) ke Batas Bawah Kertas */}
@@ -239,6 +267,15 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
                     {formatRupiah(invoice.ppn_amount || invoice.ppnAmount)}
                   </span>
                 </div>
+
+                {(invoice.total_pph23 > 0 || invoice.pph23_amount > 0 || invoice.wht > 0) && (
+                  <div className="flex justify-between text-black font-semibold border-t border-stone-300 pt-1">
+                    <span>WHT:</span>
+                    <span className="font-mono text-black font-bold">
+                      -{formatRupiah(invoice.total_pph23 || invoice.pph23_amount || invoice.wht)}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex justify-between font-bold border-t border-stone-400 pt-2 text-xs text-black">
                   <span>GRAND TOTAL:</span>

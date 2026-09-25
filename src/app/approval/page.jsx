@@ -403,7 +403,7 @@ export default function ApprovalPage() {
 
                   <div className="p-3.5 bg-stone-50/70 rounded-lg border border-stone-200">
                     <span className="text-[10px] text-black uppercase tracking-wider block mb-0.5 font-bold">
-                      INVOICE TO:
+                      BILL TO:
                     </span>
                     <p className="text-black text-xs font-bold">{activeInvoice.client_name}</p>
                     <p className="text-black font-medium text-[11px] whitespace-pre-line mt-0.5 leading-relaxed">
@@ -412,52 +412,79 @@ export default function ApprovalPage() {
                   </div>
 
                   {/* Tabel Item */}
-                  <table className="w-full text-left border-collapse border border-stone-300 text-xs">
-                    <thead className="bg-stone-100/80 text-black font-bold border-b border-stone-300">
-                      <tr>
-                        <th className="py-2 px-3 border-r border-stone-300 w-10 text-center text-black font-bold">No</th>
-                        <th className="py-2 px-3 border-r border-stone-300 text-black font-bold">ITEM DESCRIPTION</th>
-                        <th className="py-2 px-2.5 border-r border-stone-300 w-16 text-center text-black font-bold">QTY</th>
-                        <th className="py-2 px-2.5 border-r border-stone-300 w-16 text-center text-black font-bold">UOM</th>
-                        <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-300">
-                      {activeInvoice.items?.map((it, idx) => (
-                        <tr key={it.id || idx}>
-                          <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">{idx + 1}</td>
-                          <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">{it.item_description}</td>
-                          <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">{it.qty || 1}</td>
-                          <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">{it.uom || 'PCS'}</td>
-                          <td className="py-2 px-3 text-right font-mono text-black font-bold">
-                            {formatRupiah(it.total_price)}
-                          </td>
-                        </tr>
-                      ))}
+                  {(() => {
+                    const isPoSource = activeInvoice.importSource === 'po' || activeInvoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
 
-                      {(() => {
-                        const hasJasaCetak = activeInvoice.items?.some(
-                          (it) => it.isJasaCetak || (it.item_description || '').toUpperCase() === 'JASA CETAK'
-                        );
-                        const jasaVal = Number(activeInvoice.discountJasaCetak) || 0;
-
-                        if (!hasJasaCetak && jasaVal !== 0) {
-                          return (
-                            <tr className="bg-stone-50/50 text-black">
-                              <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">*</td>
-                              <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">JASA CETAK</td>
-                              <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">1</td>
-                              <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">PCS</td>
+                    return (
+                      <table className="w-full text-left border-collapse border border-stone-300 text-xs">
+                        <thead className="bg-stone-100/80 text-black font-bold border-b border-stone-300">
+                          <tr>
+                            <th className="py-2 px-3 border-r border-stone-300 w-10 text-center text-black font-bold">No</th>
+                            <th className="py-2 px-3 border-r border-stone-300 text-black font-bold">ITEM DESCRIPTION</th>
+                            {isPoSource && (
+                              <>
+                                <th className="py-2 px-2.5 border-r border-stone-300 w-16 text-center text-black font-bold">QTY</th>
+                                <th className="py-2 px-2.5 border-r border-stone-300 w-16 text-center text-black font-bold">UOM</th>
+                              </>
+                            )}
+                            <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-300">
+                          {activeInvoice.items?.map((it, idx) => (
+                            <tr key={it.id || idx}>
+                              <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">{idx + 1}</td>
+                              <td className="py-2 px-3 border-r border-stone-300 text-black font-medium">{it.item_description}</td>
+                              {isPoSource && (
+                                <>
+                                  <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">{it.qty || 1}</td>
+                                  <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">{it.uom || 'PCS'}</td>
+                                </>
+                              )}
                               <td className="py-2 px-3 text-right font-mono text-black font-bold">
-                                {formatRupiah(Math.abs(jasaVal))}
+                                {formatRupiah(it.total_price)}
                               </td>
                             </tr>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </tbody>
-                  </table>
+                          ))}
+
+                          {(() => {
+                            const hasJasaCetakRow = activeInvoice.items?.some(
+                              (it) => (it.item_description || it.store_name || '').toUpperCase() === 'JASA CETAK'
+                            );
+                            const jasaVal =
+                              Number(
+                                activeInvoice.total_jasa_cetak ??
+                                activeInvoice.totalJasaCetak ??
+                                activeInvoice.discountJasaCetak ??
+                                activeInvoice.jasaCetak ??
+                                0
+                              ) ||
+                              activeInvoice.items?.reduce((sum, it) => sum + (Number(it.jasa_cetak) || 0), 0) ||
+                              0;
+
+                            if (!hasJasaCetakRow && jasaVal > 0) {
+                              return (
+                                <tr className="bg-stone-50/50 text-black">
+                                  <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">*</td>
+                                  <td className="py-2 px-3 border-r border-stone-300 text-black font-bold">JASA CETAK</td>
+                                  {isPoSource && (
+                                    <>
+                                      <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">1</td>
+                                      <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">PCS</td>
+                                    </>
+                                  )}
+                                  <td className="py-2 px-3 text-right font-mono text-black font-bold">
+                                    {formatRupiah(jasaVal)}
+                                  </td>
+                                </tr>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </div>
 
                 {/* Footer Kertas Invoice */}
@@ -484,7 +511,7 @@ export default function ApprovalPage() {
                       <div className="flex justify-between text-black font-medium">
                         <span>TOTAL:</span>
                         <span className="font-mono text-black font-bold">
-                          {formatRupiah(activeInvoice.total_harga_net)}
+                          {formatRupiah(activeInvoice.total_dpp || activeInvoice.total_faktur || activeInvoice.total_harga_net)}
                         </span>
                       </div>
 
@@ -494,6 +521,15 @@ export default function ApprovalPage() {
                           {formatRupiah(activeInvoice.ppn_amount)}
                         </span>
                       </div>
+
+                      {(activeInvoice.total_pph23 > 0 || activeInvoice.pph23_amount > 0 || activeInvoice.wht > 0) && (
+                        <div className="flex justify-between text-black font-medium border-t border-stone-100 pt-1">
+                          <span>WHT:</span>
+                          <span className="font-mono text-black font-bold">
+                            -{formatRupiah(activeInvoice.total_pph23 || activeInvoice.pph23_amount || activeInvoice.wht)}
+                          </span>
+                        </div>
+                      )}
 
                       <div className="flex justify-between border-t border-stone-300 pt-2 text-xs text-black font-bold">
                         <span>GRAND TOTAL:</span>

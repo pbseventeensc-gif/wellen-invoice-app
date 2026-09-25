@@ -19,6 +19,10 @@ export default function CreateInvoicePage() {
   const [promoName, setPromoName] = useState('STICKER VINYL INDOOR GLOSSY');
   const [isDppActive, setIsDppActive] = useState(false);
 
+  // Parameter Mode Import PO (3 Button Kontrol)
+  const [isPoExclVatActive, setIsPoExclVatActive] = useState(false); // Button 2: Harga Exc PPN per line (PO / 1.11)
+  const [showJasaCetakPo, setShowJasaCetakPo] = useState(true); // Button 3: ON/OFF Item Jasa Cetak
+
   // Sumber Import Mode: 'excel' vs 'po'
   const [importSource, setImportSource] = useState('excel');
 
@@ -49,17 +53,21 @@ export default function CreateInvoicePage() {
             const rawTotalFaktur = Number(s.total_faktur || s.total_price || s.raw_total || s.nilai_wpp || 0);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 
+            const isJasa = (s.item_description || s.store_name || '').toUpperCase().trim() === 'JASA CETAK';
+
             return {
               ...s,
               id: s.id || `store-${idx}-${Date.now()}`,
-              total_faktur: s.total_faktur !== undefined ? Number(s.total_faktur) : breakdown.totalFaktur,
-              total_price: s.total_price !== undefined ? Number(s.total_price) : breakdown.totalFaktur,
+              total_faktur: breakdown.totalFaktur,
               dpp: s.dpp !== undefined ? Number(s.dpp) : breakdown.dpp,
+              nilai_barang: s.nilai_barang !== undefined ? Number(s.nilai_barang) : breakdown.nilaiBarang,
               jasa_cetak: s.jasa_cetak !== undefined ? Number(s.jasa_cetak) : breakdown.jasaCetak,
               pph23: s.pph23 !== undefined ? Number(s.pph23) : breakdown.pph23,
+              ppn: s.ppn !== undefined ? Number(s.ppn) : breakdown.ppn,
               qty: Number(s.qty) || 1,
               uom: s.uom || 'PCS',
               unit_price: Number(s.unit_price) || rawTotalFaktur,
+              isJasaCetak: isJasa,
             };
           });
 
@@ -87,33 +95,76 @@ export default function CreateInvoicePage() {
     }
   };
 
-  // 1. Baris Item Terhitung Langsung
-  const calculatedStoreRows = stores.map((row) => {
-    const totalFaktur = Number(row.total_faktur || row.total_price || 0);
-    const breakdown = calculateFakturBreakdown(totalFaktur);
+  // Filter Item Jasa Cetak khusus jika Toggle Item Jasa Cetak = OFF
+  const filteredStoresByJasa = stores.filter((row) => {
+    if (importSource === 'po' && !showJasaCetakPo) {
+      const desc = String(row.item_description || row.store_name || '').toUpperCase().trim();
+      return desc !== 'JASA CETAK';
+    }
+    return true;
+  });
 
-    const dpp = row.dpp !== undefined ? Number(row.dpp) : breakdown.dpp;
-    const jasaCetak = row.jasa_cetak !== undefined ? Number(row.jasa_cetak) : breakdown.jasaCetak;
-    const pph23 = row.pph23 !== undefined ? Number(row.pph23) : breakdown.pph23;
+  // 1. Baris Item Terhitung Langsung (Sesuai Parameter Exc PPN per line)
+  const calculatedStoreRows = filteredStoresByJasa.map((row) => {
+    const rawUnitPrice = Number(row.unit_price || row.total_faktur || row.total_price || 0);
+    const qty = Number(row.qty) || 1;
+
+    // Parameter ON/OFF: Harga Exc PPN per Line (PO / 1.11)
+    let effectiveUnitPrice = rawUnitPrice;
+    if (importSource === 'po' && isPoExclVatActive) {
+      effectiveUnitPrice = Math.round(rawUnitPrice / 1.11);
+    }
+
+    const effectiveTotalPrice = Math.round(qty * effectiveUnitPrice);
+    const breakdown = calculateFakturBreakdown(effectiveTotalPrice);
+
+    const dpp = row.dpp !== undefined && row.dpp > 0 ? Number(row.dpp) : breakdown.dpp;
+    const nilaiBarang = row.nilai_barang !== undefined && row.nilai_barang > 0 ? Number(row.nilai_barang) : breakdown.nilaiBarang;
+    const jasaCetak = row.jasa_cetak !== undefined && row.jasa_cetak > 0 ? Number(row.jasa_cetak) : breakdown.jasaCetak;
+    const pph23 = row.pph23 !== undefined && row.pph23 > 0 ? Number(row.pph23) : breakdown.pph23;
+    const ppn = row.ppn !== undefined && row.ppn > 0 ? Number(row.ppn) : breakdown.ppn;
 
     return {
       ...row,
-      totalFaktur,
+      effectiveUnitPrice,
+      effectiveTotalPrice,
       dpp,
+      nilaiBarang,
       jasaCetak,
       pph23,
+      ppn,
     };
   });
 
+  const jasaCetakStores = stores.filter((row) => {
+    const desc = String(row.item_description || row.store_name || '').toUpperCase().trim();
+    return desc === 'JASA CETAK';
+  });
+
+  // Hitung Nilai Jasa Cetak secara terpisah untuk Tampilan Baris Bawah
+  const totalJasaCetakPoOverall = jasaCetakStores.reduce((acc, row) => {
+    const p = isPoExclVatActive ? Math.round(Number(row.unit_price || 0) / 1.11) : Number(row.unit_price || 0);
+    return acc + Math.round((Number(row.qty) || 1) * p);
+  }, 0);
+
   // 2. Akumulasi Total Keseluruhan
-  const totalFakturOverall = calculatedStoreRows.reduce((acc, row) => acc + row.totalFaktur, 0);
   const totalDppOverall = calculatedStoreRows.reduce((acc, row) => acc + row.dpp, 0);
+  const totalNilaiBarangOverall = calculatedStoreRows.reduce((acc, row) => acc + row.nilaiBarang, 0);
   const totalJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.jasaCetak, 0);
   const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
 
-  // Perhitungan VAT 11% dari (Total DPP + Total Jasa Cetak)
-  const vatAmount = Math.round((totalDppOverall + totalJasaCetakOverall) * 0.11);
-  const grandTotal = totalFakturOverall + vatAmount;
+  // Akumulasi khusus Mode PO
+  const totalPoNetOverall = calculatedStoreRows.reduce((acc, row) => acc + row.effectiveTotalPrice, 0);
+
+  // VAT (PPN)
+  const vatAmount = importSource === 'po'
+    ? Math.round(totalPoNetOverall * 0.11)
+    : (calculatedStoreRows.reduce((acc, row) => acc + (row.ppn || 0), 0) || Math.round(totalDppOverall * 0.11));
+
+  // Grand Total = Total + VAT - WHT
+  const grandTotal = importSource === 'po'
+    ? totalPoNetOverall + vatAmount
+    : totalDppOverall + vatAmount - totalPph23Overall;
 
   // Submit ke Antrean Approval
   const handleSubmitApproval = () => {
@@ -132,13 +183,16 @@ export default function CreateInvoicePage() {
       created_by: createdByName,
       ar_name: createdByName,
       is_dpp_active: isDppActive,
-      total_faktur: totalFakturOverall,
-      total_harga_net: totalFakturOverall,
-      subtotal_net: totalFakturOverall,
+      is_po_excl_vat_active: isPoExclVatActive,
+      show_jasa_cetak_po: showJasaCetakPo,
+      total_faktur: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
+      total_harga_net: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
+      subtotal_net: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
       total_dpp: totalDppOverall,
-      total_jasa_cetak: totalJasaCetakOverall,
-      total_pph23: totalPph23Overall,
-      dpp_lain: totalDppOverall,
+      total_dpp_lainnya: totalNilaiBarangOverall,
+      total_jasa_cetak: importSource === 'po' ? totalJasaCetakPoOverall : totalJasaCetakOverall,
+      total_pph23: importSource === 'po' ? 0 : totalPph23Overall,
+      dpp_lain: totalNilaiBarangOverall,
       ppn_amount: vatAmount,
       grand_total: grandTotal,
       time_created: new Date().toISOString().slice(0, 16).replace('T', ' '),
@@ -149,14 +203,16 @@ export default function CreateInvoicePage() {
         no_faktur: it.no_faktur || wppNumber,
         wpp_number: it.wpp_number || wppNumber,
         item_description: it.item_description || it.store_name,
-        total_faktur: it.totalFaktur,
-        total_price: it.totalFaktur,
+        total_faktur: importSource === 'po' ? it.effectiveTotalPrice : it.dpp,
+        total_price: importSource === 'po' ? it.effectiveTotalPrice : it.dpp,
         dpp: it.dpp,
+        nilai_barang: it.nilaiBarang,
         jasa_cetak: it.jasaCetak,
         pph23: it.pph23,
         qty: it.qty || 1,
         uom: it.uom || 'PCS',
-        unit_price: it.unit_price || it.totalFaktur,
+        unit_price: importSource === 'po' ? it.effectiveUnitPrice : it.dpp,
+        isJasaCetak: it.isJasaCetak || false,
       })),
     };
 
@@ -235,14 +291,14 @@ export default function CreateInvoicePage() {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Invoice to (Client)</p>
+          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Bill to (Client)</p>
           <div>
             <label className="text-[11px] font-medium text-stone-500 block mb-1">Client Name (PT)</label>
             <input
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
             />
           </div>
           <div>
@@ -251,7 +307,7 @@ export default function CreateInvoicePage() {
               rows={3}
               value={clientAddress}
               onChange={(e) => setClientAddress(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none uppercase"
             />
           </div>
         </div>
@@ -264,34 +320,126 @@ export default function CreateInvoicePage() {
               type="text"
               value={promoName}
               onChange={(e) => setPromoName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
             />
           </div>
-          <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-2">DPP :</label>
-            <div className="flex items-center gap-5 text-xs font-semibold text-stone-800">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="dppOption"
-                  checked={isDppActive === true}
-                  onChange={() => setIsDppActive(true)}
-                  className="accent-amber-500 w-4 h-4"
-                />
-                <span>ON</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="dppOption"
-                  checked={isDppActive === false}
-                  onChange={() => setIsDppActive(false)}
-                  className="accent-amber-500 w-4 h-4"
-                />
-                <span>OFF</span>
-              </label>
+
+          {importSource === 'po' ? (
+            <div className="space-y-3 pt-2 border-t border-stone-100">
+              {/* Button 1: DPP ON/OFF */}
+              <div>
+                <label className="text-[11px] font-medium text-stone-600 block mb-1">
+                  DPP :
+                </label>
+                <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dppOptionPo"
+                      checked={isDppActive === true}
+                      onChange={() => setIsDppActive(true)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>ON</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="dppOptionPo"
+                      checked={isDppActive === false}
+                      onChange={() => setIsDppActive(false)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>OFF</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Button 2: Harga Exc PPN per Line (PO / 1.11) */}
+              <div>
+                <label className="text-[11px] font-medium text-stone-600 block mb-1">
+                  Harga Excl. PPN per Line (Harga PO / 1.11) :
+                </label>
+                <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="poExclVatOption"
+                      checked={isPoExclVatActive === true}
+                      onChange={() => setIsPoExclVatActive(true)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>ON</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="poExclVatOption"
+                      checked={isPoExclVatActive === false}
+                      onChange={() => setIsPoExclVatActive(false)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>OFF</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Button 3: Item Jasa Cetak ON/OFF */}
+              <div>
+                <label className="text-[11px] font-medium text-stone-600 block mb-1">
+                  Item Jasa Cetak :
+                </label>
+                <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="showJasaCetakOption"
+                      checked={showJasaCetakPo === true}
+                      onChange={() => setShowJasaCetakPo(true)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>ON</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="showJasaCetakOption"
+                      checked={showJasaCetakPo === false}
+                      onChange={() => setShowJasaCetakPo(false)}
+                      className="accent-amber-500 w-4 h-4"
+                    />
+                    <span>OFF</span>
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="text-[11px] font-medium text-stone-500 block mb-2">DPP :</label>
+              <div className="flex items-center gap-5 text-xs font-semibold text-stone-800">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dppOption"
+                    checked={isDppActive === true}
+                    onChange={() => setIsDppActive(true)}
+                    className="accent-amber-500 w-4 h-4"
+                  />
+                  <span>ON</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dppOption"
+                    checked={isDppActive === false}
+                    onChange={() => setIsDppActive(false)}
+                    className="accent-amber-500 w-4 h-4"
+                  />
+                  <span>OFF</span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -307,21 +455,29 @@ export default function CreateInvoicePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-semibold border-b border-stone-200 tracking-wider">
-              <tr>
-                <th className="py-3 px-4 w-12 text-center">NO</th>
-                <th className="py-3 px-4 font-semibold">ITEM DESCRIPTION</th>
-                {importSource === 'po' && (
-                  <>
-                    <th className="py-3 px-4 text-center w-20 font-semibold">QTY</th>
-                    <th className="py-3 px-4 text-center w-20 font-semibold">UOM</th>
-                  </>
-                )}
-                <th className="py-3 px-4 text-right w-36 font-semibold">TOTAL FAKTUR</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">DPP</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">JASA CETAK</th>
-                <th className="py-3 px-4 text-right w-36 font-semibold">PPH 23</th>
-                <th className="py-3 px-4 text-center w-16 font-semibold">ACTION</th>
-              </tr>
+              {importSource === 'po' ? (
+                <tr>
+                  <th className="py-3 px-4 w-12 text-center">NO</th>
+                  <th className="py-3 px-4 font-semibold">ITEM DESCRIPTION</th>
+                  <th className="py-3 px-4 text-center w-20 font-semibold">QTY</th>
+                  <th className="py-3 px-4 text-center w-20 font-semibold">UOM</th>
+                  <th className="py-3 px-4 text-right w-36 font-semibold">
+                    {isPoExclVatActive ? 'UNIT PRICE (EXC VAT)' : 'UNIT PRICE (RP)'}
+                  </th>
+                  <th className="py-3 px-4 text-right w-40 font-semibold">TOTAL PRICE</th>
+                  <th className="py-3 px-4 text-center w-16 font-semibold">ACTION</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th className="py-3 px-4 w-12 text-center">NO</th>
+                  <th className="py-3 px-4 font-semibold">ITEM DESCRIPTION</th>
+                  <th className="py-3 px-4 text-right w-36 font-semibold">DPP</th>
+                  <th className="py-3 px-4 text-right w-36 font-semibold">DPP lainnya</th>
+                  <th className="py-3 px-4 text-right w-44 font-semibold">DPP Nilai lain Jasa cetak</th>
+                  <th className="py-3 px-4 text-right w-32 font-semibold">WHT</th>
+                  <th className="py-3 px-4 text-center w-16 font-semibold">ACTION</th>
+                </tr>
+              )}
             </thead>
             <tbody className="divide-y divide-stone-100 font-normal">
               {calculatedStoreRows.map((row, idx) => (
@@ -332,31 +488,42 @@ export default function CreateInvoicePage() {
                   <td className="py-3.5 px-4 text-center text-stone-400 font-mono">
                     {idx + 1}
                   </td>
-                  <td className="py-3.5 px-4 font-semibold text-stone-900">
+                  <td className="py-3.5 px-4 font-semibold text-stone-900 uppercase">
                     {row.item_description || row.store_name}
                   </td>
-                  {importSource === 'po' && (
+
+                  {importSource === 'po' ? (
                     <>
                       <td className="py-3.5 px-4 text-center font-mono font-bold text-stone-900">
                         {row.qty || 1}
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 bg-amber-50 rounded-md">
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 bg-amber-50 rounded-md uppercase">
                         {row.uom || 'PCS'}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
+                        {formatRupiah(row.effectiveUnitPrice)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-slate-900">
+                        {formatRupiah(row.effectiveTotalPrice)}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
+                        {formatRupiah(row.dpp)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                        {formatRupiah(row.nilaiBarang)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                        {formatRupiah(row.jasaCetak)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
+                        {formatRupiah(row.pph23)}
                       </td>
                     </>
                   )}
-                  <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
-                    {formatRupiah(row.totalFaktur)}
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
-                    {formatRupiah(row.dpp)}
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
-                    {formatRupiah(row.jasaCetak)}
-                  </td>
-                  <td className="py-3.5 px-4 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
-                    {formatRupiah(row.pph23)}
-                  </td>
+
                   <td className="py-3.5 px-4 text-center">
                     <button
                       type="button"
@@ -370,23 +537,73 @@ export default function CreateInvoicePage() {
                 </tr>
               ))}
             </tbody>
+
+            {/* Total Footer Bawah Tabel */}
+            {calculatedStoreRows.length > 0 && (
+              <tfoot className="bg-stone-50 border-t-2 border-stone-200 text-xs text-stone-900">
+                {importSource === 'po' ? (
+                  <tr className="font-bold">
+                    <td colSpan={5} className="py-3 px-4 text-stone-700 uppercase tracking-wider text-[11px] font-extrabold">
+                      TOTAL PO EXCL. VAT:
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
+                      {formatRupiah(totalPoNetOverall)}
+                    </td>
+                    <td></td>
+                  </tr>
+                ) : (
+                  <>
+                    <tr className="font-bold">
+                      <td colSpan={2} className="py-3 px-4 text-stone-700 uppercase tracking-wider text-[11px] font-extrabold">
+                        TOTAL:
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
+                        {formatRupiah(totalDppOverall)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-stone-700 whitespace-nowrap">
+                        {formatRupiah(totalNilaiBarangOverall)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
+                        {formatRupiah(totalJasaCetakOverall)}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
+                        {formatRupiah(totalPph23Overall)}
+                      </td>
+                      <td></td>
+                    </tr>
+
+                    <tr className="font-extrabold border-t border-stone-200 bg-amber-50/40 text-stone-900">
+                      <td colSpan={2} className="py-3 px-4 uppercase tracking-wider text-[11px]">
+                        JASA CETAK:
+                      </td>
+                      <td colSpan={2}></td>
+                      <td className="py-3 px-4 text-right font-mono text-stone-900 whitespace-nowrap font-extrabold text-xs">
+                        {formatRupiah(totalJasaCetakOverall)}
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </>
+                )}
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
 
-      {/* Kotak Rekapitulasi Nilai Bawah (Sesuai Opsi DPP ON/OFF & Urutan Gambar) */}
+      {/* Kotak Rekapitulasi Nilai Bawah */}
       <div className="flex justify-end">
         <div className="bg-white w-full sm:w-88 p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 text-xs">
           <div className="flex justify-between items-center text-stone-600">
             <span>TOTAL:</span>
-            <span className="font-mono font-bold text-stone-900">{formatRupiah(totalFakturOverall)}</span>
+            <span className="font-mono font-bold text-stone-900">
+              {formatRupiah(importSource === 'po' ? totalPoNetOverall : totalDppOverall)}
+            </span>
           </div>
 
-          {/* TOTAL DPP LAIN-LAIN hanya tampil jika DPP Radio = ON */}
           {isDppActive && (
             <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
               <span>TOTAL DPP LAIN-LAIN:</span>
-              <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppOverall)}</span>
+              <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalNilaiBarangOverall)}</span>
             </div>
           )}
 
@@ -394,6 +611,13 @@ export default function CreateInvoicePage() {
             <span>VAT:</span>
             <span className="font-mono font-semibold text-stone-900">{formatRupiah(vatAmount)}</span>
           </div>
+
+          {importSource !== 'po' && (
+            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+              <span>WHT:</span>
+              <span className="font-mono font-semibold text-stone-900">-{formatRupiah(totalPph23Overall)}</span>
+            </div>
+          )}
 
           <div className="flex justify-between items-center text-sm font-bold text-stone-900 border-t border-stone-200 pt-3">
             <span>GRAND TOTAL:</span>
