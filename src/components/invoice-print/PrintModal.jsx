@@ -1,11 +1,20 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
 import Image from 'next/image';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
 
 export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed }) {
+  const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
+
+  useEffect(() => {
+    if (invoice) {
+      setShowTaxBreakdown(Boolean(invoice.show_tax_breakdown_in_print));
+    }
+  }, [invoice]);
+
   if (!isOpen || !invoice) return null;
 
   const handlePrint = () => {
@@ -73,15 +82,45 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
         }
       `}</style>
 
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-4 border border-slate-200/90 print:border-none print:shadow-none print:my-0 animate-in zoom-in-95 duration-150">
-        {/* Header Action Bar */}
-        <div className="sticky top-0 z-20 p-3.5 px-5 bg-slate-900 border-b border-slate-800 text-white flex items-center justify-between shadow-md print:hidden">
-          <div className="text-xs font-medium flex items-center gap-2.5">
-            <span className="text-slate-400">Document Preview:</span>
-            <span className="text-white font-mono font-medium bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-              {invoice.invoice_number}
-            </span>
+      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-4 border border-stone-200 print:border-none print:shadow-none print:my-0 animate-in zoom-in-95 duration-150">
+        {/* Header Action Bar - Polos, Clean White Style */}
+        <div className="sticky top-0 z-20 p-3.5 px-5 bg-white border-b border-stone-200 text-stone-900 flex flex-wrap items-center justify-between shadow-2xs print:hidden">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-stone-500 font-medium">Document Preview:</span>
+              <span className="text-stone-900 font-mono font-bold bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200">
+                {invoice.invoice_number}
+              </span>
+            </div>
+
+            {/* Live Interactive ON / OFF Breakdown Toggle */}
+            <div className="flex items-center gap-2 pl-3 border-l border-stone-200">
+              <span className="text-[11px] font-semibold text-stone-600">Breakdown Columns:</span>
+              <div className="flex items-center gap-3 text-xs font-semibold text-stone-800">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="modalTaxBreakdownToggle"
+                    checked={showTaxBreakdown === true}
+                    onChange={() => setShowTaxBreakdown(true)}
+                    className="accent-[#55e07e] w-4 h-4 cursor-pointer"
+                  />
+                  <span>ON</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="modalTaxBreakdownToggle"
+                    checked={showTaxBreakdown === false}
+                    onChange={() => setShowTaxBreakdown(false)}
+                    className="accent-[#55e07e] w-4 h-4 cursor-pointer"
+                  />
+                  <span>OFF</span>
+                </label>
+              </div>
+            </div>
           </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -94,7 +133,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             <button
               type="button"
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+              className="text-stone-400 hover:text-stone-800 p-2 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -143,10 +182,9 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
               </p>
             </div>
 
-            {/* Tabel Rincian Barang */}
+            {/* Tabel Rincian Barang - Berubah Secara Langsung Saat ON / OFF Diklik */}
             {(() => {
               const isPoSource = invoice.importSource === 'po' || invoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
-              const showTaxBreakdown = invoice.show_tax_breakdown_in_print === true;
 
               if (showTaxBreakdown) {
                 return (
