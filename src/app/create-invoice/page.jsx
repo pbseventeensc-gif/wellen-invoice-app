@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah } from '@/utils/taxCalculator';
+import { supabase } from '@/lib/supabase';
 
 export default function CreateInvoicePage() {
   const router = useRouter();
@@ -11,7 +12,7 @@ export default function CreateInvoicePage() {
   // Form State
   const [wppNumber, setWppNumber] = useState('WPK 0826-702909');
   const [invoiceDate, setInvoiceDate] = useState('2026-09-10');
-  const [createdByName] = useState('FAHADA');
+  const [createdByName, setCreatedByName] = useState('FAHADA');
   const [clientName, setClientName] = useState('PT DIGITAL CREATIVE ASIA');
   const [clientAddress, setClientAddress] = useState(
     'EightyEight @Kasablanka Office Tower Lt. 30 Unit B\nJl. Casablanca Kav. 88 Tebet Jakarta Selatan - DKI Jakarta\n021 - 29820243'
@@ -19,7 +20,7 @@ export default function CreateInvoicePage() {
   const [promoName, setPromoName] = useState('STICKER VINYL INDOOR GLOSSY');
   const [isDppActive, setIsDppActive] = useState(false);
 
-  // Toggle ON/OFF Rincian Pajak Breakdown di Invoice Cetak/Validation (Requirement 4)
+  // Toggle ON/OFF Rincian Tax Breakdown di Invoice Cetak/Validation
   const [showTaxBreakdownInPrint, setShowTaxBreakdownInPrint] = useState(false);
 
   // Parameter Mode Import PO
@@ -33,6 +34,24 @@ export default function CreateInvoicePage() {
   const [stores, setStores] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Auto detect AR Staff Name from Supabase User Email
+  useEffect(() => {
+    const loadArUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          const email = user.email.toLowerCase();
+          if (email.includes('keyjia')) setCreatedByName('KEYJIA');
+          else if (email.includes('fahada')) setCreatedByName('FAHADA');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadArUser();
+  }, []);
+
+  // Load Data
   useEffect(() => {
     try {
       const storedSource = sessionStorage.getItem('wellen_import_source');
@@ -284,13 +303,15 @@ export default function CreateInvoicePage() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Created By (AR)</label>
-            <input
-              type="text"
+            <label className="text-[11px] font-medium text-stone-500 block mb-1">Created By (AR Staff)</label>
+            <select
               value={createdByName}
-              readOnly
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-600 cursor-not-allowed"
-            />
+              onChange={(e) => setCreatedByName(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 cursor-pointer"
+            >
+              <option value="FAHADA">FAHADA (fahadahanifah@gmail.com)</option>
+              <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
+            </select>
           </div>
         </div>
 
@@ -329,35 +350,6 @@ export default function CreateInvoicePage() {
           </div>
 
           <div className="pt-2 border-t border-stone-100 space-y-3">
-            {/* Toggle Tampilkan Rincian Tax Breakdown di Cetak Invoice (Requirement 4) */}
-            <div>
-              <label className="text-[11px] font-medium text-stone-700 block mb-1">
-                Tampilkan Kolom Breakdown di Cetak Invoice :
-              </label>
-              <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="taxBreakdownPrintOption"
-                    checked={showTaxBreakdownInPrint === true}
-                    onChange={() => setShowTaxBreakdownInPrint(true)}
-                    className="accent-[#55e07e] w-4 h-4"
-                  />
-                  <span>ON</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="taxBreakdownPrintOption"
-                    checked={showTaxBreakdownInPrint === false}
-                    onChange={() => setShowTaxBreakdownInPrint(false)}
-                    className="accent-[#55e07e] w-4 h-4"
-                  />
-                  <span>OFF (Default)</span>
-                </label>
-              </div>
-            </div>
-
             {importSource === 'po' ? (
               <>
                 <div>
@@ -447,7 +439,7 @@ export default function CreateInvoicePage() {
         </div>
       </div>
 
-      {/* Tabel Rincian Barang / Jasa dengan Kolom Lengkap Seperti Import Invoice (Requirement 2, 3, 4) */}
+      {/* Tabel Rincian Barang / Jasa */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-stone-100 flex items-center justify-between">
           <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider">

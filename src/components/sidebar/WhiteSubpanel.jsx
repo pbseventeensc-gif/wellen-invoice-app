@@ -23,8 +23,8 @@ export default function WhiteSubpanel() {
   const router = useRouter();
   const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
   const [profile, setProfile] = useState({
-    name: 'Admin',
-    role: 'Super Admin',
+    name: 'FAHADA',
+    role: 'AR Created',
   });
 
   const updateApprovedCount = () => {
@@ -53,23 +53,38 @@ export default function WhiteSubpanel() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
+          const email = user.email?.toLowerCase() || '';
           const { data, error } = await supabase
             .from('profiles')
             .select('full_name, role')
             .eq('id', user.id)
             .maybeSingle();
 
-          if (error) {
-            console.error('Error fetching profile:', error.message);
-            return;
+          let defaultName = 'FAHADA';
+          let defaultRole = 'AR Created';
+
+          if (email.includes('keyjia')) {
+            defaultName = 'KEYJIA';
+            defaultRole = 'AR Created';
+          } else if (email.includes('fahada')) {
+            defaultName = 'FAHADA';
+            defaultRole = 'AR Created';
+          } else if (email.includes('rizkha') || email.includes('risca')) {
+            defaultName = 'RISCA';
+            defaultRole = 'Approval';
+          } else if (email.includes('tanita')) {
+            defaultName = 'TANITA';
+            defaultRole = 'Approval';
           }
 
-          if (data) {
-            setProfile({
-              name: data.full_name || user.email?.split('@')[0]?.toUpperCase() || 'Admin',
-              role: data.role || 'AR Created',
-            });
+          if (error) {
+            console.error('Error fetching profile:', error.message);
           }
+
+          setProfile({
+            name: data?.full_name || defaultName,
+            role: data?.role || defaultRole,
+          });
         }
       } catch (err) {
         console.error('Failed to load profile:', err);
