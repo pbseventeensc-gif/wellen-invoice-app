@@ -1,20 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
 import Image from 'next/image';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
 
 export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed }) {
-  const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
-
-  useEffect(() => {
-    if (invoice) {
-      setShowTaxBreakdown(Boolean(invoice.show_tax_breakdown_in_print));
-    }
-  }, [invoice]);
-
   if (!isOpen || !invoice) return null;
 
   const handlePrint = () => {
@@ -83,42 +74,13 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
       `}</style>
 
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-4 border border-stone-200 print:border-none print:shadow-none print:my-0 animate-in zoom-in-95 duration-150">
-        {/* Header Action Bar - Polos, Clean White Style */}
-        <div className="sticky top-0 z-20 p-3.5 px-5 bg-white border-b border-stone-200 text-stone-900 flex flex-wrap items-center justify-between shadow-2xs print:hidden">
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-stone-500 font-medium">Document Preview:</span>
-              <span className="text-stone-900 font-mono font-bold bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200">
-                {invoice.invoice_number}
-              </span>
-            </div>
-
-            {/* Live Interactive ON / OFF Breakdown Toggle */}
-            <div className="flex items-center gap-2 pl-3 border-l border-stone-200">
-              <span className="text-[11px] font-semibold text-stone-600">Breakdown Columns:</span>
-              <div className="flex items-center gap-3 text-xs font-semibold text-stone-800">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="modalTaxBreakdownToggle"
-                    checked={showTaxBreakdown === true}
-                    onChange={() => setShowTaxBreakdown(true)}
-                    className="accent-[#55e07e] w-4 h-4 cursor-pointer"
-                  />
-                  <span>ON</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="modalTaxBreakdownToggle"
-                    checked={showTaxBreakdown === false}
-                    onChange={() => setShowTaxBreakdown(false)}
-                    className="accent-[#55e07e] w-4 h-4 cursor-pointer"
-                  />
-                  <span>OFF</span>
-                </label>
-              </div>
-            </div>
+        {/* Header Action Bar - Polos & Clean White Style */}
+        <div className="sticky top-0 z-20 p-3.5 px-5 bg-white border-b border-stone-200 text-stone-900 flex items-center justify-between shadow-2xs print:hidden">
+          <div className="text-xs font-medium flex items-center gap-2.5">
+            <span className="text-stone-500">Document Preview:</span>
+            <span className="text-stone-900 font-mono font-bold bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200">
+              {invoice.invoice_number}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -182,42 +144,9 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
               </p>
             </div>
 
-            {/* Tabel Rincian Barang - Berubah Secara Langsung Saat ON / OFF Diklik */}
+            {/* Tabel Rincian Barang Standard */}
             {(() => {
               const isPoSource = invoice.importSource === 'po' || invoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
-
-              if (showTaxBreakdown) {
-                return (
-                  <table className="w-full text-left border-collapse border border-stone-400 text-xs">
-                    <thead className="bg-stone-200 border-b border-stone-400 font-bold text-[10px]">
-                      <tr>
-                        <th className="py-2 px-2 border-r border-stone-400 w-8 text-center">No</th>
-                        <th className="py-2 px-2 border-r border-stone-400">ITEM DESCRIPTION</th>
-                        <th className="py-2 px-2 text-right border-r border-stone-400">TOTAL PRICE</th>
-                        <th className="py-2 px-2 text-right border-r border-stone-400">DPP</th>
-                        <th className="py-2 px-2 text-right border-r border-stone-400">NILAI BARANG</th>
-                        <th className="py-2 px-2 text-right border-r border-stone-400">JASA CETAK</th>
-                        <th className="py-2 px-2 text-right border-r border-stone-400">WHT</th>
-                        <th className="py-2 px-2 text-right">PPN</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-300 font-medium text-[11px]">
-                      {invoice.items?.map((it, idx) => (
-                        <tr key={it.id || idx}>
-                          <td className="py-1.5 px-2 text-center border-r border-stone-300">{idx + 1}</td>
-                          <td className="py-1.5 px-2 border-r border-stone-300 font-bold">{it.item_description || it.store_name}</td>
-                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300 font-bold">{formatRupiah(it.total_price || it.total_faktur)}</td>
-                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.dpp)}</td>
-                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.nilai_barang)}</td>
-                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.jasa_cetak)}</td>
-                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.pph23)}</td>
-                          <td className="py-1.5 px-2 text-right font-mono font-bold">{formatRupiah(it.ppn)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                );
-              }
 
               return (
                 <table className="w-full text-left border-collapse border border-stone-400 text-xs">

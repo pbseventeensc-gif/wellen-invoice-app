@@ -44,9 +44,6 @@ export default function ApprovalPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profile, setProfile] = useState({ name: 'RISCA', role: 'Approval' });
 
-  // State untuk Live ON/OFF Breakdown Toggle di Preview Approval
-  const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
-
   // Reject Modal State
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState(null);
@@ -106,12 +103,6 @@ export default function ApprovalPage() {
 
   const activeInvoice = queue.find((q) => q.id === selectedId) || queue[0] || null;
 
-  useEffect(() => {
-    if (activeInvoice) {
-      setShowTaxBreakdown(Boolean(activeInvoice.show_tax_breakdown_in_print));
-    }
-  }, [activeInvoice]);
-
   const handleApprove = (invoiceToApprove) => {
     if (!invoiceToApprove) return;
 
@@ -119,7 +110,6 @@ export default function ApprovalPage() {
       ...invoiceToApprove,
       id: invoiceToApprove.id || `inv-${Date.now()}`,
       status: 'approved',
-      show_tax_breakdown_in_print: showTaxBreakdown,
       ar_name: invoiceToApprove.created_by || invoiceToApprove.ar_name || 'FAHADA',
       approved_by: profile.name || 'RISCA',
       time_approved: new Date().toISOString().slice(0, 16).replace('T', ' '),
@@ -360,31 +350,6 @@ export default function ApprovalPage() {
                   <span>Invoice Validation Sheet: <strong>{activeInvoice.invoice_number}</strong></span>
                 </div>
 
-                {/* Live Interactive ON / OFF Breakdown Toggle di Header Approval Sheet */}
-                <div className="flex items-center gap-3 text-xs bg-white px-3 py-1.5 rounded-xl border border-stone-200">
-                  <span className="text-[11px] font-medium text-stone-600">Breakdown Columns:</span>
-                  <label className="flex items-center gap-1 cursor-pointer font-bold text-stone-800">
-                    <input
-                      type="radio"
-                      name="approvalBreakdownToggle"
-                      checked={showTaxBreakdown === true}
-                      onChange={() => setShowTaxBreakdown(true)}
-                      className="accent-[#55e07e] w-3.5 h-3.5 cursor-pointer"
-                    />
-                    <span>ON</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer font-bold text-stone-800">
-                    <input
-                      type="radio"
-                      name="approvalBreakdownToggle"
-                      checked={showTaxBreakdown === false}
-                      onChange={() => setShowTaxBreakdown(false)}
-                      className="accent-[#55e07e] w-3.5 h-3.5 cursor-pointer"
-                    />
-                    <span>OFF</span>
-                  </label>
-                </div>
-
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -445,42 +410,9 @@ export default function ApprovalPage() {
                     </p>
                   </div>
 
-                  {/* Tabel Item - Berubah Secara Langsung Saat ON / OFF Diklik */}
+                  {/* Tabel Item */}
                   {(() => {
                     const isPoSource = activeInvoice.importSource === 'po' || activeInvoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
-
-                    if (showTaxBreakdown) {
-                      return (
-                        <table className="w-full text-left border-collapse border border-stone-400 text-xs">
-                          <thead className="bg-stone-200 border-b border-stone-400 font-bold text-[10px]">
-                            <tr>
-                              <th className="py-2 px-2 border-r border-stone-400 w-8 text-center">No</th>
-                              <th className="py-2 px-2 border-r border-stone-400">ITEM DESCRIPTION</th>
-                              <th className="py-2 px-2 text-right border-r border-stone-400">TOTAL PRICE</th>
-                              <th className="py-2 px-2 text-right border-r border-stone-400">DPP</th>
-                              <th className="py-2 px-2 text-right border-r border-stone-400">NILAI BARANG</th>
-                              <th className="py-2 px-2 text-right border-r border-stone-400">JASA CETAK</th>
-                              <th className="py-2 px-2 text-right border-r border-stone-400">WHT</th>
-                              <th className="py-2 px-2 text-right">PPN</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-stone-300 font-medium text-[11px]">
-                            {activeInvoice.items?.map((it, idx) => (
-                              <tr key={it.id || idx}>
-                                <td className="py-1.5 px-2 text-center border-r border-stone-300">{idx + 1}</td>
-                                <td className="py-1.5 px-2 border-r border-stone-300 font-bold">{it.item_description || it.store_name}</td>
-                                <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300 font-bold">{formatRupiah(it.total_price || it.total_faktur)}</td>
-                                <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.dpp)}</td>
-                                <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.nilai_barang)}</td>
-                                <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.jasa_cetak)}</td>
-                                <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.pph23)}</td>
-                                <td className="py-1.5 px-2 text-right font-mono font-bold">{formatRupiah(it.ppn)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      );
-                    }
 
                     return (
                       <table className="w-full text-left border-collapse border border-stone-300 text-xs">
