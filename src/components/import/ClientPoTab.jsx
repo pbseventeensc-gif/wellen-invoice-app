@@ -15,7 +15,6 @@ import { formatRupiah } from '@/utils/taxCalculator';
 export default function ClientPoTab() {
   const router = useRouter();
 
-  // State Form PO Klien (Mulai KOSONG sebelum di-upload)
   const [poFileName, setPoFileName] = useState('');
   const [poClientName, setPoClientName] = useState('');
   const [poNumber, setPoNumber] = useState('');
@@ -24,10 +23,7 @@ export default function ClientPoTab() {
   const [poIncludeJasaCetak, setPoIncludeJasaCetak] = useState(false);
   const [poItems, setPoItems] = useState([]);
 
-  // State Item PO Terpilih (Sistem Penagihan Parsial / Termin)
   const [selectedPoIds, setSelectedPoIds] = useState([]);
-
-  // Sisa Item PO dari Penagihan Parsial Sebelumya
   const [remainingBatch, setRemainingBatch] = useState(null);
 
   useEffect(() => {
@@ -70,7 +66,6 @@ export default function ClientPoTab() {
     }
   };
 
-  // Reset / Hapus seluruh data PO di Form
   const handleClearPoForm = () => {
     if (poItems.length > 0 || poClientName || poNumber) {
       if (!confirm('Clear all entered PO header details and line items?')) return;
@@ -84,7 +79,6 @@ export default function ClientPoTab() {
     setPoIncludeJasaCetak(false);
   };
 
-  // Handler Upload File PO PDF / Gambar (Data Seragam KAPITAL & Tanpa Terpotong)
   const handlePoFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,7 +110,6 @@ export default function ClientPoTab() {
     setSelectedPoIds(defaultItems.map((item) => item.id));
   };
 
-  // Tambah Baris PO Item Baru (Otomatis Kapital)
   const handleAddPoItem = () => {
     const newItemId = `po-${Date.now()}-${poItems.length + 1}`;
     setPoItems((prev) => [
@@ -133,7 +126,6 @@ export default function ClientPoTab() {
     setSelectedPoIds((prev) => [...prev, newItemId]);
   };
 
-  // Update Item PO (Otomatis Kapital)
   const handleUpdatePoItem = (id, field, val) => {
     setPoItems((prev) =>
       prev.map((item) => {
@@ -151,13 +143,11 @@ export default function ClientPoTab() {
     );
   };
 
-  // Hapus Item PO
   const handleRemovePoItem = (id) => {
     setPoItems((prev) => prev.filter((it) => it.id !== id));
     setSelectedPoIds((prev) => prev.filter((itemId) => itemId !== id));
   };
 
-  // Process & Stage PO ke Invoice (Penagihan Parsial / Termin Billing)
   const handleProceedPOInvoice = () => {
     const selectedRows = poItems.filter((r) => selectedPoIds.includes(r.id));
 
@@ -192,7 +182,6 @@ export default function ClientPoTab() {
       };
     });
 
-    // Simpan sisa item PO yang belum ditagih ke Invoice List (wellen_wpp_staging) untuk Termin / Batch berikutnya
     const unselectedRows = poItems.filter((r) => !selectedPoIds.includes(r.id));
     if (unselectedRows.length > 0) {
       try {
@@ -249,11 +238,10 @@ export default function ClientPoTab() {
 
   return (
     <div className="space-y-4">
-      {/* Banner Notifikasi Sisa PO Belum Ditagihkan (Termin Sisa) */}
       {remainingBatch && remainingBatch.remaining_items?.length > 0 && (
-        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 font-medium text-amber-900">
-            <span className="p-1 bg-amber-200/80 rounded-full text-amber-800">
+        <div className="p-3.5 bg-[#55e07e]/10 border border-[#55e07e]/20 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 font-medium text-stone-900">
+            <span className="p-1 bg-[#55e07e]/20 rounded-full text-stone-900">
               <FileText size={14} />
             </span>
             <span>
@@ -264,15 +252,15 @@ export default function ClientPoTab() {
           <button
             type="button"
             onClick={handleLoadRemainingBatch}
-            className="bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold px-3.5 py-1.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+            className="bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold px-3.5 py-1.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
           >
             Load Unbilled PO Items (Termin #2)
           </button>
         </div>
       )}
 
-      {/* Box Upload File PO PDF / Gambar Scan */}
-      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-amber-400 transition-colors shadow-xs">
+      {/* Box Upload File PO */}
+      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-[#55e07e] transition-colors shadow-xs">
         <input
           type="file"
           id="poFileUpload"
@@ -281,7 +269,7 @@ export default function ClientPoTab() {
           className="hidden"
         />
         <label htmlFor="poFileUpload" className="cursor-pointer flex items-center justify-center gap-4">
-          <div className="p-2 bg-amber-50/80 rounded-full text-amber-500 shrink-0">
+          <div className="p-2 bg-[#55e07e]/10 rounded-full text-stone-900 shrink-0">
             <UploadCloud size={22} />
           </div>
           <div className="text-left">
@@ -299,7 +287,7 @@ export default function ClientPoTab() {
       <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-stone-100">
           <div className="flex items-center gap-2 text-stone-900 font-bold text-sm uppercase">
-            <FileText size={18} className="text-amber-500" />
+            <FileText size={18} className="text-stone-900" />
             <span>Client Purchase Order (PO Header Details)</span>
           </div>
 
@@ -323,7 +311,7 @@ export default function ClientPoTab() {
               value={poClientName}
               onChange={(e) => setPoClientName(e.target.value.toUpperCase())}
               placeholder="e.g. PT. FOODS BEVERAGES INDONESIA"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 uppercase outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 uppercase outline-none focus:border-[#55e07e]"
             />
           </div>
 
@@ -336,7 +324,7 @@ export default function ClientPoTab() {
               value={poNumber}
               onChange={(e) => setPoNumber(e.target.value.toUpperCase())}
               placeholder="e.g. WPP-4607477988"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 uppercase outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 uppercase outline-none focus:border-[#55e07e]"
             />
           </div>
 
@@ -349,7 +337,7 @@ export default function ClientPoTab() {
               value={poDate}
               onChange={(e) => setPoDate(e.target.value)}
               onClick={(e) => e.target.showPicker?.()}
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-stone-900 outline-none focus:border-amber-500 cursor-pointer"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-stone-900 outline-none focus:border-[#55e07e] cursor-pointer"
             />
           </div>
 
@@ -362,7 +350,7 @@ export default function ClientPoTab() {
               value={poPromoName}
               onChange={(e) => setPoPromoName(e.target.value.toUpperCase())}
               placeholder="e.g. PURCHASE ORDER MATERIAL & JASA"
-              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-900 uppercase outline-none focus:border-amber-500"
+              className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-900 uppercase outline-none focus:border-[#55e07e]"
             />
           </div>
         </div>
@@ -372,7 +360,7 @@ export default function ClientPoTab() {
       <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 font-bold text-stone-900 uppercase">
-            <Layers size={16} className="text-amber-500" />
+            <Layers size={16} className="text-stone-900" />
             <span>PO Material & Line-Item Breakdown ({poItems.length} Items)</span>
           </div>
 
@@ -395,7 +383,7 @@ export default function ClientPoTab() {
                     checked={poItems.length > 0 && selectedPoIds.length === poItems.length}
                     onChange={handleToggleSelectAllPoItems}
                     disabled={poItems.length === 0}
-                    className="rounded border-stone-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                    className="rounded border-stone-300 text-stone-900 focus:ring-[#55e07e] cursor-pointer"
                     title="Select All / Deselect All PO Items"
                   />
                 </th>
@@ -422,14 +410,14 @@ export default function ClientPoTab() {
                   return (
                     <tr
                       key={item.id}
-                      className={`transition-colors ${isSelected ? 'bg-amber-50/20' : 'bg-stone-50/40 opacity-60'}`}
+                      className={`transition-colors ${isSelected ? 'bg-[#55e07e]/10' : 'bg-stone-50/40 opacity-60'}`}
                     >
                       <td className="py-2.5 px-3 text-center">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleToggleSelectPoItem(item.id)}
-                          className="rounded border-stone-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
+                          className="rounded border-stone-300 text-stone-900 focus:ring-[#55e07e] cursor-pointer"
                         />
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono text-stone-400">{idx + 1}</td>
@@ -439,7 +427,7 @@ export default function ClientPoTab() {
                           rows={1}
                           value={item.description}
                           onChange={(e) => handleUpdatePoItem(item.id, 'description', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-stone-900 uppercase outline-none focus:border-amber-500 focus:bg-white resize-y min-h-[34px] leading-relaxed"
+                          className="w-full px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-stone-900 uppercase outline-none focus:border-[#55e07e] focus:bg-white resize-y min-h-[34px] leading-relaxed"
                         />
                       </td>
 
@@ -449,7 +437,7 @@ export default function ClientPoTab() {
                           step="any"
                           value={item.qty}
                           onChange={(e) => handleUpdatePoItem(item.id, 'qty', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-bold text-center text-stone-900 outline-none focus:border-amber-500 focus:bg-white"
+                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-bold text-center text-stone-900 outline-none focus:border-[#55e07e] focus:bg-white"
                         />
                       </td>
 
@@ -457,7 +445,7 @@ export default function ClientPoTab() {
                         <select
                           value={item.uom || 'M2'}
                           onChange={(e) => handleUpdatePoItem(item.id, 'uom', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-center text-stone-800 uppercase outline-none focus:border-amber-500 cursor-pointer"
+                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-center text-stone-800 uppercase outline-none focus:border-[#55e07e] cursor-pointer"
                         >
                           <option value="M2">M²</option>
                           <option value="EA">EA</option>
@@ -473,7 +461,7 @@ export default function ClientPoTab() {
                           type="number"
                           value={item.unit_price}
                           onChange={(e) => handleUpdatePoItem(item.id, 'unit_price', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-bold text-right text-stone-900 outline-none focus:border-amber-500 focus:bg-white"
+                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-bold text-right text-stone-900 outline-none focus:border-[#55e07e] focus:bg-white"
                         />
                       </td>
 
@@ -510,7 +498,7 @@ export default function ClientPoTab() {
               )}
             </span>
             {poItems.length > 0 && selectedPoIds.length < poItems.length && (
-              <span className="bg-amber-100 text-amber-800 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+              <span className="bg-[#55e07e]/10 text-stone-900 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
                 Partial Billing: {selectedPoIds.length} of {poItems.length} items selected
               </span>
             )}
@@ -522,11 +510,11 @@ export default function ClientPoTab() {
             disabled={selectedPoIds.length === 0}
             className={`inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-colors shrink-0 ${
               selectedPoIds.length > 0
-                ? 'bg-amber-500 hover:bg-amber-600 text-stone-950 cursor-pointer'
+                ? 'bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 cursor-pointer'
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
           >
-            <span>Process Selected PO Items ({selectedPoIds.length})</span>
+            <span>Process ({selectedPoIds.length})</span>
             <ArrowRight size={15} />
           </button>
         </div>

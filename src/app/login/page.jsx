@@ -46,38 +46,38 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-900/60 p-4 font-sans selection:bg-orange-500 selection:text-white">
+    <div className="relative flex min-h-screen items-center justify-center bg-stone-900/80 p-4 font-sans selection:bg-[#578ef5] selection:text-white">
       {/* Background Overlay */}
       <div 
-        className="absolute inset-0 -z-10 bg-cover bg-center opacity-40 blur-[1px]" 
+        className="absolute inset-0 -z-10 bg-cover bg-center opacity-30 blur-[1px]"
         style={{ backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)', backgroundSize: '24px 24px' }}
       />
 
       {/* Card Login */}
-      <div className="w-full max-w-sm rounded-3xl bg-white px-8 py-10 shadow-2xl transition-all">
+      <div className="w-full max-w-sm rounded-3xl bg-white px-8 py-10 shadow-2xl transition-all border border-stone-200">
         
         {/* Logo Wellen Print */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="relative h-32 w-96 mb-2">
+          <div className="relative h-24 w-80 mb-2">
             <Image
               src="/logo-wellen.png"
               alt="Wellen Print Logo"
               fill
-              sizes="(max-width: 768px) 100vw, 384px"
+              sizes="320px"
               className="object-contain"
               priority
             />
           </div>
 
-          <h1 className="mt-4 text-xl font-bold text-slate-900">Admin Account</h1>
-          <p className="mt-1 text-xs text-slate-500">
-            
+          <h1 className="mt-2 text-xl font-bold text-stone-900">Admin Account</h1>
+          <p className="mt-1 text-xs text-stone-500 font-normal">
+            Sign in to access sales & invoicing portal
           </p>
         </div>
 
         {/* Notifikasi Error */}
         {errorMsg && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-600">
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-600">
             <AlertCircle size={15} className="shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -86,7 +86,7 @@ export default function LoginPage() {
         {/* Form Input */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
               EMAIL ADDRESS
             </label>
             <input
@@ -95,12 +95,12 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@wellenprint.com"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 outline-none transition focus:border-slate-800 focus:ring-1 focus:ring-slate-800"
+              className="w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-xs text-stone-800 placeholder-stone-400 outline-none transition focus:border-[#578ef5] focus:ring-1 focus:ring-[#578ef5]"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
               PASSWORD
             </label>
             <div className="relative">
@@ -110,12 +110,12 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-10 text-xs text-slate-800 placeholder-slate-400 outline-none transition focus:border-slate-800 focus:ring-1 focus:ring-slate-800"
+                className="w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 pr-10 text-xs text-stone-800 placeholder-stone-400 outline-none transition focus:border-[#578ef5] focus:ring-1 focus:ring-[#578ef5]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 transition hover:text-slate-600 focus:outline-none"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 transition hover:text-stone-600 focus:outline-none"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -126,7 +126,7 @@ export default function LoginPage() {
           <div className="flex justify-end">
             <Link
               href="/forgot-password"
-              className="text-[11px] font-medium text-slate-400 transition hover:text-slate-700"
+              className="text-[11px] font-medium text-stone-400 transition hover:text-stone-700"
             >
               Forgot password?
             </Link>
@@ -135,7 +135,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0f172a] py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-[#1e293b] active:scale-[0.99] disabled:opacity-50"
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-stone-800 active:scale-[0.99] disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
               <>

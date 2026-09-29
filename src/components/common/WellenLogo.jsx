@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Ganti nilai w (lebar) dan h (tinggi) di bawah ini:
- * - Ukuran sebelumnya : className = "w-8 h-[44px]"
- * - Ukuran lebih besar: className = "w-10 h-[52px]" atau "w-12 h-[60px]"
- */
 export default function WellenLogo({ className = 'w-12 h-[64px]' }) {
   return (
     <svg

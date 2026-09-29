@@ -4,6 +4,14 @@ import DashboardLayoutWrapper from '@/components/DashboardLayoutWrapper';
 export const metadata = {
   title: 'Wellen Invoice Generator',
   description: 'Wellen Brothers Accounting and Invoicing Application',
+  icons: {
+    icon: [
+      { url: '/logo-wellen.png', type: 'image/png' },
+      { url: '/icon.png', type: 'image/png' },
+    ],
+    shortcut: '/logo-wellen.png',
+    apple: '/logo-wellen.png',
+  },
 };
 
 export default function RootLayout({ children }) {

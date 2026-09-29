@@ -6,7 +6,6 @@ import ImportExcelTab from '@/components/import/ImportExcelTab';
 import ClientPoTab from '@/components/import/ClientPoTab';
 
 export default function ImportExcelPage() {
-  // Tab Mode: 'excel' (POS Recap) vs 'po' (Client Purchase Order PDF / Dynamic)
   const [activeTab, setActiveTab] = useState('excel');
 
   return (
@@ -18,14 +17,14 @@ export default function ImportExcelPage() {
         </p>
       </div>
 
-      {/* Tab Switcher Mode Input (Tanpa Angka) */}
+      {/* Tab Switcher Mode Input */}
       <div className="flex border-b border-stone-200">
         <button
           type="button"
           onClick={() => setActiveTab('excel')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'excel'
-              ? 'border-amber-500 text-amber-600 bg-amber-50/50'
+              ? 'border-[#578ef5] text-[#578ef5] bg-[#578ef5]/10'
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
@@ -38,7 +37,7 @@ export default function ImportExcelPage() {
           onClick={() => setActiveTab('po')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'po'
-              ? 'border-amber-500 text-amber-600 bg-amber-50/50'
+              ? 'border-[#578ef5] text-[#578ef5] bg-[#578ef5]/10'
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >

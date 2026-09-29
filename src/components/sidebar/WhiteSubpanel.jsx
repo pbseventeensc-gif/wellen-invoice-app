@@ -33,7 +33,6 @@ export default function WhiteSubpanel() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          // Hitung hanya invoice yang belum diunduh (time_download bernilai null/kosong)
           const unprinted = parsed.filter((inv) => !inv.time_download).length;
           setPendingDownloadCount(unprinted);
         }
@@ -50,7 +49,6 @@ export default function WhiteSubpanel() {
     updateApprovedCount();
     window.addEventListener('storage', updateApprovedCount);
 
-    // Ambil data profil dari tabel Supabase
     const loadProfile = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -83,13 +81,11 @@ export default function WhiteSubpanel() {
     return () => window.removeEventListener('storage', updateApprovedCount);
   }, []);
 
-  // Fungsi Logout
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
 
-  // Filter Menu Berdasarkan Hak Akses Role
   const allInvoiceMenus = [
     { label: 'Import WPP (Excel)', href: '/import', icon: FileSpreadsheet },
     { label: 'Create Invoice', href: '/create-invoice', icon: FileText },
@@ -107,23 +103,19 @@ export default function WhiteSubpanel() {
   const showApprovedInvoices = isRouteAllowed(profile.role, '/approved-invoices');
 
   return (
-    <div className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between py-6 px-4 shrink-0 select-none">
+    <div className="w-64 bg-white border-r border-stone-200/80 flex flex-col justify-between py-6 px-4 shrink-0 select-none">
       <div>
         {/* Header Modul */}
         <div className="mb-6 px-2">
-          <h2 className="text-lg font-bold text-slate-900 tracking-tight">Sales & Invoicing</h2>
-          <div className="mt-3 flex gap-4 border-b border-slate-200 pb-2">
-            <span className="text-xs font-bold text-[#c2410c] border-b-2 border-[#c2410c] pb-2 -mb-2.5 cursor-pointer">
-              Workspace
-            </span>
-          </div>
+          <h2 className="text-base font-bold text-stone-900 tracking-tight">Sales & Invoicing</h2>
+          <p className="text-[11px] text-stone-400 mt-0.5">Wellen Workspace</p>
         </div>
 
         {/* Section: INVOICES */}
         {visibleInvoiceMenus.length > 0 && (
           <div className="mb-6">
-            <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Invoices
+            <p className="px-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
+              Invoices & Queue
             </p>
             <div className="space-y-1">
               {visibleInvoiceMenus.map((item) => {
@@ -133,13 +125,13 @@ export default function WhiteSubpanel() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#fff7ed] text-[#c2410c] border border-[#ffedd5]'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                        : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                     }`}
                   >
-                    <Icon size={16} className={isActive ? 'text-[#ea580c]' : 'text-slate-400'} />
+                    <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
                     <span>{item.label}</span>
                   </Link>
                 );
@@ -151,8 +143,8 @@ export default function WhiteSubpanel() {
         {/* Section: REPORTS */}
         {(visibleReportMenus.length > 0 || showApprovedInvoices) && (
           <div>
-            <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Reports
+            <p className="px-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
+              Reports & Tax
             </p>
             <div className="space-y-1">
               {visibleReportMenus.map((item) => {
@@ -163,13 +155,13 @@ export default function WhiteSubpanel() {
                   <Link
                     key={item.label}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#fff7ed] text-[#c2410c] border border-[#ffedd5]'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                        : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                     }`}
                   >
-                    <Icon size={16} className={isActive ? 'text-[#ea580c]' : 'text-slate-400'} />
+                    <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
                     <span>{item.label}</span>
                   </Link>
                 );
@@ -179,18 +171,18 @@ export default function WhiteSubpanel() {
               {showApprovedInvoices && (
                 <Link
                   href="/approved-invoices"
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all mt-2 ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                     pathname === '/approved-invoices'
-                      ? 'bg-[#fff7ed] text-[#c2410c] border border-[#ffedd5]'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
+                      ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                      : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <CheckCircle2 size={16} className="text-emerald-600" />
+                    <CheckCircle2 size={15} className="text-emerald-600" />
                     <span>Approved Invoices</span>
                   </div>
                   {pendingDownloadCount > 0 && (
-                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
                       {pendingDownloadCount}
                     </span>
                   )}
@@ -202,34 +194,34 @@ export default function WhiteSubpanel() {
       </div>
 
       {/* Profil User + Tombol Logout */}
-      <div className="border-t border-slate-100 pt-4 px-2">
+      <div className="border-t border-stone-100 pt-4 px-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="relative inline-block">
-              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-orange-200 bg-orange-50 shadow-sm">
+              <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full border border-stone-200 bg-stone-100">
                 <Image
                   src={userAvatar}
                   alt={profile.name}
                   fill
-                  sizes="36px"
+                  sizes="32px"
                   className="object-cover"
                   priority
                 />
               </div>
-              <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+              <span className="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800 leading-tight">{profile.name}</p>
-              <p className="text-[10px] text-slate-400">{profile.role}</p>
+              <p className="text-xs font-bold text-stone-900 leading-tight">{profile.name}</p>
+              <p className="text-[10px] text-stone-400 font-medium">{profile.role}</p>
             </div>
           </div>
 
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+            className="rounded-lg p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
           </button>
         </div>
       </div>

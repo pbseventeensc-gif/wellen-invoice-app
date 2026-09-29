@@ -10,7 +10,6 @@ import {
   FilePlus, 
   Trash2, 
   Search, 
-  FileSpreadsheet,
   ArrowUpDown,
   Check,
   Info,
@@ -19,7 +18,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
-  RotateCcw,
   Filter,
   ChevronsUpDown,
   ShieldCheck
@@ -33,18 +31,15 @@ export default function InvoiceListPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Pagination State (Default 10 per halaman)
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // State untuk tooltip alasan tolak
+  // Tooltip & Sorting
   const [activeReasonId, setActiveReasonId] = useState(null);
-
-  // State untuk Sorting
   const [sortField, setSortField] = useState('import_date');
   const [sortDirection, setSortDirection] = useState('desc');
 
-  // Generator Data Mock 120 Item untuk Simulasi Skala Ratusan Data
   const generate120MockItems = () => {
     const now = new Date();
     const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString();
@@ -54,7 +49,6 @@ export default function InvoiceListPage() {
     const mockList = [];
     let counter = 1000;
 
-    // 1. 95 Item Ready to Process
     for (let i = 0; i < 95; i++) {
       counter++;
       mockList.push({
@@ -70,7 +64,6 @@ export default function InvoiceListPage() {
       });
     }
 
-    // 2. 13 Item Waiting Approval (Normal SLA < 3 Hari)
     for (let i = 0; i < 13; i++) {
       counter++;
       mockList.push({
@@ -86,7 +79,6 @@ export default function InvoiceListPage() {
       });
     }
 
-    // 3. 2 Item Waiting Approval (SLA Overdue >= 3 Hari)
     for (let i = 0; i < 2; i++) {
       counter++;
       mockList.push({
@@ -102,7 +94,6 @@ export default function InvoiceListPage() {
       });
     }
 
-    // 4. 10 Item Rejected
     for (let i = 0; i < 10; i++) {
       counter++;
       mockList.push({
@@ -139,7 +130,6 @@ export default function InvoiceListPage() {
         '[]'
       );
 
-      // Jika kosong atau baru pertama kali dibuka, buatkan 120 data mock
       if (rawStaging.length === 0 && localStorage.getItem('wellen_wpp_staging') === null) {
         rawStaging = generate120MockItems();
         localStorage.setItem('wellen_wpp_staging', JSON.stringify(rawStaging));
@@ -151,7 +141,7 @@ export default function InvoiceListPage() {
 
       setItems(activePendingItems);
     } catch (e) {
-      console.error('Gagal membaca data invoice list:', e);
+      console.error('Failed to read invoice list data:', e);
     }
   };
 
@@ -177,7 +167,6 @@ export default function InvoiceListPage() {
     }
   };
 
-  // Filter Data Berdasarkan Search & Status Filter
   const filteredItems = useMemo(() => {
     return items.filter((it) => {
       const dateStr = it.import_date || it.imported_at || it.waktu_import;
@@ -224,7 +213,6 @@ export default function InvoiceListPage() {
     });
   }, [items, searchTerm, statusFilter, sortField, sortDirection]);
 
-  // Hitung jumlah untuk Counter Badges
   const statusCounts = useMemo(() => {
     let ready = 0, waiting = 0, rejected = 0, slaBreached = 0;
     items.forEach((it) => {
@@ -241,14 +229,12 @@ export default function InvoiceListPage() {
     return { all: items.length, ready, waiting, rejected, slaBreached };
   }, [items]);
 
-  // Pagination Logic
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredItems.slice(start, start + pageSize);
   }, [filteredItems, currentPage, pageSize]);
 
-  // Bulk Delete Selected (Dapat menghapus SEMUA status termasuk Waiting Approval)
   const handleDeleteSelected = () => {
     if (selectedIds.length === 0) return;
     if (confirm(`Are you sure you want to delete ${selectedIds.length} selected items?`)) {
@@ -267,7 +253,6 @@ export default function InvoiceListPage() {
     );
   };
 
-  // Centang / Hapus Centang Semua Baris di Halaman Aktif (Tanpa Pembatasan Status)
   const handleToggleSelectAll = () => {
     const allPaginatedSelected = paginatedItems.length > 0 && paginatedItems.every((r) => selectedIds.includes(r.id));
 
@@ -346,21 +331,21 @@ export default function InvoiceListPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24">
       {/* Header Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
         <div>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoice List & Staged Queue</h1>
-          <p className="text-xs text-stone-500 mt-1">
+          <p className="text-xs text-stone-500 mt-1 font-normal">
             List of imported WPP data pending final invoice generation, approval status, and SLA tracking.
           </p>
         </div>
       </div>
 
-      {/* Bar Notifikasi Info Aturan - Simpel & Elegan (Warna Netral Corporate) */}
-      <div className="bg-stone-50 border border-stone-200/80 rounded-2xl p-3.5 px-4 flex items-start gap-3 text-xs text-stone-700">
+      {/* Info Bar SLA Rules */}
+      <div className="bg-stone-50 border border-stone-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-stone-700">
         <ShieldCheck size={18} className="text-stone-500 shrink-0 mt-0.5" />
         <div className="space-y-0.5 text-[11px] leading-relaxed">
           <p className="font-semibold text-stone-900 text-xs">SLA Rules & Retention Policy:</p>
-          <p className="text-stone-500">
+          <p className="text-stone-500 font-normal">
             • <span className="text-stone-800 font-medium">Waiting Approval</span> status exceeding <strong className="text-stone-900">3 days</strong> triggers SLA Overdue warning.
             <br />
             • Filter and process large datasets easily with page size options (10 / 25 / 50 data per page) and bulk checkboxes.
@@ -368,19 +353,19 @@ export default function InvoiceListPage() {
         </div>
       </div>
 
-      {/* Bulk Action Bar saat Dicentang Banyak [✓] - Minimalis Corporate (Desain Elegan) */}
+      {/* Clean Floating Bulk Action Bar */}
       {selectedIds.length > 0 && (
-        <div className="bg-slate-900 text-white p-3 px-4 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 border border-slate-800 animate-in fade-in zoom-in-95 duration-150">
+        <div className="bg-white text-stone-900 p-3.5 px-5 rounded-2xl shadow-xl flex flex-wrap items-center justify-between gap-3 border border-stone-200 animate-in fade-in zoom-in-95 duration-150">
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 flex items-center justify-center font-mono text-xs font-medium">
+            <div className="w-6 h-6 rounded-lg bg-stone-100 border border-stone-200 text-stone-700 flex items-center justify-center font-mono text-xs font-bold">
               ✓
             </div>
             <div>
-              <p className="text-xs font-semibold text-white">
-                {selectedIds.length} Data Terpilih
+              <p className="text-xs font-bold text-stone-900">
+                {selectedIds.length} Terpilih
               </p>
-              <p className="text-[10px] text-slate-400 font-normal">
-                Pilih tindakan massal yang ingin dilakukan pada item yang dicentang.
+              <p className="text-[10px] text-stone-500 font-normal">
+                Pilih tindakan massal yang ingin dilakukan.
               </p>
             </div>
           </div>
@@ -389,26 +374,26 @@ export default function InvoiceListPage() {
             <button
               type="button"
               onClick={handleProceedSelected}
-              className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-950 font-semibold px-3.5 py-1.5 rounded-xl text-xs shadow-2xs transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold px-4 py-2 rounded-xl text-xs shadow-2xs transition cursor-pointer"
             >
               <FilePlus size={14} />
-              Process Selected ({selectedIds.length})
+              Process ({selectedIds.length})
             </button>
 
             <button
               type="button"
               onClick={handleDeleteSelected}
-              className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-rose-950/80 text-rose-300 border border-rose-900/50 hover:border-rose-700 font-normal px-3.5 py-1.5 rounded-xl text-xs transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold px-3.5 py-2 rounded-xl text-xs transition cursor-pointer"
             >
               <Trash2 size={14} />
-              Delete Selected ({selectedIds.length})
+              Delete ({selectedIds.length})
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedIds([])}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-              title="Deselect All / Batal Pilihan"
+              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100 transition cursor-pointer"
+              title="Batal Pilihan"
             >
               <X size={15} />
             </button>
@@ -416,9 +401,8 @@ export default function InvoiceListPage() {
         </div>
       )}
 
-      {/* Filter Toolbar (Simpel, Tanpa Warna Rame) */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs flex flex-wrap gap-3 items-center justify-between">
-        {/* Search Field */}
+      {/* Filter Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs flex flex-wrap gap-3 items-center justify-between">
         <div className="relative flex-1 min-w-[280px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
@@ -429,12 +413,11 @@ export default function InvoiceListPage() {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-400 text-stone-900 placeholder:text-stone-400 font-normal"
+            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 placeholder:text-stone-400 font-normal"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Status Filter Dropdown Pill */}
           <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
             <Filter size={14} className="text-stone-400 shrink-0" />
             <select
@@ -454,7 +437,6 @@ export default function InvoiceListPage() {
             <ChevronsUpDown size={13} className="text-stone-400 shrink-0 pointer-events-none absolute right-2.5" />
           </div>
 
-          {/* Per Page Dropdown Pill */}
           <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
             <span className="text-stone-400 text-[11px]">Tampilkan:</span>
             <select
@@ -474,8 +456,8 @@ export default function InvoiceListPage() {
         </div>
       </div>
 
-      {/* Tabel Data Invoices List dengan Sticky Header & Scrollable Body */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+      {/* Tabel Invoices List */}
+      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto max-h-[580px] overflow-y-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 z-20 bg-stone-100/95 backdrop-blur-xs text-stone-600 uppercase font-semibold text-[10px] border-b border-stone-200 tracking-wider shadow-2xs">
@@ -486,7 +468,7 @@ export default function InvoiceListPage() {
                     onClick={handleToggleSelectAll}
                     className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors mx-auto cursor-pointer ${
                       isAllSelected
-                        ? 'bg-slate-900 border-slate-900 text-white'
+                        ? 'bg-stone-900 border-stone-900 text-white'
                         : 'border-stone-300 hover:border-stone-400 bg-white'
                     }`}
                     title={isAllSelected ? 'Deselect all' : 'Select all rows on this page'}
@@ -569,18 +551,17 @@ export default function InvoiceListPage() {
                         isDuplicate 
                           ? 'bg-rose-50/70 border-l-4 border-l-rose-500'
                           : isSelected
-                          ? 'bg-slate-100/80'
+                          ? 'bg-stone-100/80'
                           : 'hover:bg-stone-50/80'
                       }`}
                     >
-                      {/* Checkbox Selalu Aktif Terbuka Untuk Semua Status */}
                       <td className="py-3.5 px-3 text-center">
                         <button
                           type="button"
                           onClick={() => handleToggleSelect(row.id)}
                           className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all mx-auto cursor-pointer ${
                             isSelected
-                              ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
+                              ? 'bg-stone-900 border-stone-900 text-white shadow-2xs'
                               : 'border-stone-300 hover:border-stone-400 bg-white'
                           }`}
                         >
@@ -612,7 +593,6 @@ export default function InvoiceListPage() {
                         {formatRupiah(row.total_price || row.nilai_wpp)}
                       </td>
 
-                      {/* Status Badge */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap relative">
                         {isReady && (
                           <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 text-[10px] px-2.5 py-0.5 rounded-full border border-stone-200 font-normal">
@@ -641,19 +621,18 @@ export default function InvoiceListPage() {
                                   <Info size={11} />
                                 </button>
 
-                                {/* Popover Tooltip */}
                                 {isReasonOpen && (
-                                  <div className="absolute right-0 bottom-full mb-2 z-30 w-52 p-3 bg-slate-900 text-white rounded-2xl shadow-xl text-left normal-case tracking-normal space-y-1 animate-in fade-in zoom-in-95 duration-150 border border-slate-800">
+                                  <div className="absolute right-0 bottom-full mb-2 z-30 w-52 p-3 bg-stone-900 text-white rounded-2xl shadow-xl text-left normal-case tracking-normal space-y-1 border border-stone-800">
                                     <div className="flex items-center justify-between">
-                                      <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">Rejection Reason</span>
+                                      <span className="text-[10px] font-semibold text-stone-300 uppercase tracking-wider">Rejection Reason</span>
                                       <button 
                                         onClick={() => setActiveReasonId(null)}
-                                        className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                                        className="text-stone-400 hover:text-white text-xs cursor-pointer"
                                       >
                                         &times;
                                       </button>
                                     </div>
-                                    <p className="text-[11px] text-slate-200 leading-snug font-normal">
+                                    <p className="text-[11px] text-stone-200 leading-snug font-normal">
                                       {row.reject_reason}
                                     </p>
                                   </div>
@@ -664,7 +643,6 @@ export default function InvoiceListPage() {
                         )}
                       </td>
 
-                      {/* Alert / Retention Column dengan Badge Uniform */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {isSlaBreached ? (
                           <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 border border-stone-300 text-[10px] px-2.5 py-1 rounded-full font-normal">
@@ -677,14 +655,13 @@ export default function InvoiceListPage() {
                         )}
                       </td>
 
-                      {/* Action Column Konsisten */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {isRejected ? (
                             <button
                               type="button"
                               onClick={() => handleProceedToCreate(row)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
                               title="Edit and Resubmit"
                             >
                               <Edit3 size={12} />
@@ -694,7 +671,7 @@ export default function InvoiceListPage() {
                             <button
                               type="button"
                               onClick={() => handleProceedToCreate(row)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
                               title="Create New Invoice"
                             >
                               <FilePlus size={12} />
@@ -712,7 +689,6 @@ export default function InvoiceListPage() {
                             </button>
                           )}
 
-                          {/* Tombol Hapus Selalu Aktif untuk Seluruh Row */}
                           <button
                             type="button"
                             onClick={() => handleDelete(row.id)}
@@ -776,7 +752,7 @@ export default function InvoiceListPage() {
                         onClick={() => setCurrentPage(page)}
                         className={`w-7 h-7 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
                           currentPage === page
-                            ? 'bg-amber-500 text-stone-950 shadow-2xs'
+                            ? 'bg-stone-900 text-white shadow-2xs'
                             : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-50'
                         }`}
                       >

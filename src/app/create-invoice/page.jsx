@@ -19,9 +19,9 @@ export default function CreateInvoicePage() {
   const [promoName, setPromoName] = useState('STICKER VINYL INDOOR GLOSSY');
   const [isDppActive, setIsDppActive] = useState(false);
 
-  // Parameter Mode Import PO (3 Button Kontrol)
-  const [isPoExclVatActive, setIsPoExclVatActive] = useState(false); // Button 2: Harga Exc PPN per line (PO / 1.11)
-  const [showJasaCetakPo, setShowJasaCetakPo] = useState(true); // Button 3: ON/OFF Item Jasa Cetak
+  // Parameter Mode Import PO
+  const [isPoExclVatActive, setIsPoExclVatActive] = useState(false);
+  const [showJasaCetakPo, setShowJasaCetakPo] = useState(true);
 
   // Sumber Import Mode: 'excel' vs 'po'
   const [importSource, setImportSource] = useState('excel');
@@ -30,7 +30,6 @@ export default function CreateInvoicePage() {
   const [stores, setStores] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load Data Pertama Kali
   useEffect(() => {
     try {
       const storedSource = sessionStorage.getItem('wellen_import_source');
@@ -48,7 +47,6 @@ export default function CreateInvoicePage() {
             setWppNumber(parsed[0].no_faktur || parsed[0].wpp_number);
           }
 
-          // Ambil semua baris item dengan breakdown yang konsisten
           const validStores = parsed.map((s, idx) => {
             const rawTotalFaktur = Number(s.total_faktur || s.total_price || s.raw_total || s.nilai_wpp || 0);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
@@ -77,25 +75,23 @@ export default function CreateInvoicePage() {
         }
       }
     } catch (e) {
-      console.error('Gagal membaca data staged:', e);
+      console.error('Failed to read staged data:', e);
     }
 
     setStores([]);
     setIsInitialized(true);
   }, []);
 
-  // Hapus baris toko & simpan langsung ke sessionStorage
   const handleRemoveStore = (indexToRemove) => {
     const updated = stores.filter((_, idx) => idx !== indexToRemove);
     setStores(updated);
     try {
       sessionStorage.setItem('wellen_staged_items', JSON.stringify(updated));
     } catch (e) {
-      console.error('Gagal menyimpan perubahan ke session storage:', e);
+      console.error('Failed to update session storage:', e);
     }
   };
 
-  // Filter Item Jasa Cetak khusus jika Toggle Item Jasa Cetak = OFF
   const filteredStoresByJasa = stores.filter((row) => {
     if (importSource === 'po' && !showJasaCetakPo) {
       const desc = String(row.item_description || row.store_name || '').toUpperCase().trim();
@@ -104,12 +100,10 @@ export default function CreateInvoicePage() {
     return true;
   });
 
-  // 1. Baris Item Terhitung Langsung (Sesuai Parameter Exc PPN per line)
   const calculatedStoreRows = filteredStoresByJasa.map((row) => {
     const rawUnitPrice = Number(row.unit_price || row.total_faktur || row.total_price || 0);
     const qty = Number(row.qty) || 1;
 
-    // Parameter ON/OFF: Harga Exc PPN per Line (PO / 1.11)
     let effectiveUnitPrice = rawUnitPrice;
     if (importSource === 'po' && isPoExclVatActive) {
       effectiveUnitPrice = Math.round(rawUnitPrice / 1.11);
@@ -141,32 +135,26 @@ export default function CreateInvoicePage() {
     return desc === 'JASA CETAK';
   });
 
-  // Hitung Nilai Jasa Cetak secara terpisah untuk Tampilan Baris Bawah
   const totalJasaCetakPoOverall = jasaCetakStores.reduce((acc, row) => {
     const p = isPoExclVatActive ? Math.round(Number(row.unit_price || 0) / 1.11) : Number(row.unit_price || 0);
     return acc + Math.round((Number(row.qty) || 1) * p);
   }, 0);
 
-  // 2. Akumulasi Total Keseluruhan
   const totalDppOverall = calculatedStoreRows.reduce((acc, row) => acc + row.dpp, 0);
   const totalNilaiBarangOverall = calculatedStoreRows.reduce((acc, row) => acc + row.nilaiBarang, 0);
   const totalJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.jasaCetak, 0);
   const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
 
-  // Akumulasi khusus Mode PO
   const totalPoNetOverall = calculatedStoreRows.reduce((acc, row) => acc + row.effectiveTotalPrice, 0);
 
-  // VAT (PPN)
   const vatAmount = importSource === 'po'
     ? Math.round(totalPoNetOverall * 0.11)
     : (calculatedStoreRows.reduce((acc, row) => acc + (row.ppn || 0), 0) || Math.round(totalDppOverall * 0.11));
 
-  // Grand Total = Total + VAT - WHT
   const grandTotal = importSource === 'po'
     ? totalPoNetOverall + vatAmount
     : totalDppOverall + vatAmount - totalPph23Overall;
 
-  // Submit ke Antrean Approval
   const handleSubmitApproval = () => {
     if (stores.length === 0) {
       alert('Please add at least one store item.');
@@ -229,18 +217,18 @@ export default function CreateInvoicePage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24">
       {/* Header Halaman */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 border-b border-stone-200/80">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => router.back()}
-            className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-stone-700"
+            className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-stone-700 shadow-2xs"
           >
             <ArrowLeft size={16} />
           </button>
           <div>
             <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoice Creation Form</h1>
-            <p className="text-xs text-stone-500 mt-0.5">
+            <p className="text-xs text-stone-500 mt-0.5 font-normal">
               Review document details, store items, and breakdown figures before submitting for approval.
             </p>
           </div>
@@ -250,7 +238,7 @@ export default function CreateInvoicePage() {
           type="button"
           onClick={handleSubmitApproval}
           disabled={stores.length === 0}
-          className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-stone-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 bg-[#55e07e] hover:bg-[#42ce6b] disabled:opacity-50 text-stone-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
         >
           <Send size={14} />
           <span>Submit for Approval</span>
@@ -259,7 +247,7 @@ export default function CreateInvoicePage() {
 
       {/* Baris Identitas Faktur */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Document Identity</p>
           <div>
             <label className="text-[11px] font-medium text-stone-500 block mb-1">WPK Number (Editable)</label>
@@ -267,7 +255,7 @@ export default function CreateInvoicePage() {
               type="text"
               value={wppNumber}
               onChange={(e) => setWppNumber(e.target.value)}
-              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900"
+              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900"
             />
           </div>
           <div>
@@ -276,7 +264,7 @@ export default function CreateInvoicePage() {
               type="date"
               value={invoiceDate}
               onChange={(e) => setInvoiceDate(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-800 font-mono"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 font-mono"
             />
           </div>
           <div>
@@ -290,7 +278,7 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Bill to (Client)</p>
           <div>
             <label className="text-[11px] font-medium text-stone-500 block mb-1">Client Name (PT)</label>
@@ -298,7 +286,7 @@ export default function CreateInvoicePage() {
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 uppercase"
             />
           </div>
           <div>
@@ -307,12 +295,12 @@ export default function CreateInvoicePage() {
               rows={3}
               value={clientAddress}
               onChange={(e) => setClientAddress(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none uppercase"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-700 leading-relaxed resize-none uppercase"
             />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-4">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Project Parameters</p>
           <div>
             <label className="text-[11px] font-medium text-stone-500 block mb-1">Promo / Material Name</label>
@@ -320,13 +308,12 @@ export default function CreateInvoicePage() {
               type="text"
               value={promoName}
               onChange={(e) => setPromoName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 uppercase"
             />
           </div>
 
           {importSource === 'po' ? (
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              {/* Button 1: DPP ON/OFF */}
               <div>
                 <label className="text-[11px] font-medium text-stone-600 block mb-1">
                   DPP :
@@ -338,7 +325,7 @@ export default function CreateInvoicePage() {
                       name="dppOptionPo"
                       checked={isDppActive === true}
                       onChange={() => setIsDppActive(true)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>ON</span>
                   </label>
@@ -348,14 +335,13 @@ export default function CreateInvoicePage() {
                       name="dppOptionPo"
                       checked={isDppActive === false}
                       onChange={() => setIsDppActive(false)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>OFF</span>
                   </label>
                 </div>
               </div>
 
-              {/* Button 2: Harga Exc PPN per Line (PO / 1.11) */}
               <div>
                 <label className="text-[11px] font-medium text-stone-600 block mb-1">
                   Harga Excl. PPN per Line (Harga PO / 1.11) :
@@ -367,7 +353,7 @@ export default function CreateInvoicePage() {
                       name="poExclVatOption"
                       checked={isPoExclVatActive === true}
                       onChange={() => setIsPoExclVatActive(true)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>ON</span>
                   </label>
@@ -377,14 +363,13 @@ export default function CreateInvoicePage() {
                       name="poExclVatOption"
                       checked={isPoExclVatActive === false}
                       onChange={() => setIsPoExclVatActive(false)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>OFF</span>
                   </label>
                 </div>
               </div>
 
-              {/* Button 3: Item Jasa Cetak ON/OFF */}
               <div>
                 <label className="text-[11px] font-medium text-stone-600 block mb-1">
                   Item Jasa Cetak :
@@ -396,7 +381,7 @@ export default function CreateInvoicePage() {
                       name="showJasaCetakOption"
                       checked={showJasaCetakPo === true}
                       onChange={() => setShowJasaCetakPo(true)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>ON</span>
                   </label>
@@ -406,7 +391,7 @@ export default function CreateInvoicePage() {
                       name="showJasaCetakOption"
                       checked={showJasaCetakPo === false}
                       onChange={() => setShowJasaCetakPo(false)}
-                      className="accent-amber-500 w-4 h-4"
+                      className="accent-[#55e07e] w-4 h-4"
                     />
                     <span>OFF</span>
                   </label>
@@ -423,7 +408,7 @@ export default function CreateInvoicePage() {
                     name="dppOption"
                     checked={isDppActive === true}
                     onChange={() => setIsDppActive(true)}
-                    className="accent-amber-500 w-4 h-4"
+                    className="accent-[#55e07e] w-4 h-4"
                   />
                   <span>ON</span>
                 </label>
@@ -433,7 +418,7 @@ export default function CreateInvoicePage() {
                     name="dppOption"
                     checked={isDppActive === false}
                     onChange={() => setIsDppActive(false)}
-                    className="accent-amber-500 w-4 h-4"
+                    className="accent-[#55e07e] w-4 h-4"
                   />
                   <span>OFF</span>
                 </label>
@@ -444,12 +429,12 @@ export default function CreateInvoicePage() {
       </div>
 
       {/* Tabel Rincian Barang / Jasa */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-stone-100 flex items-center justify-between">
           <h2 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
             Item Breakdown Details {importSource === 'po' ? '(Client PO Mode)' : '(POS Excel Mode)'}
           </h2>
-          <span className="text-xs text-stone-400 font-medium">Line Count: {calculatedStoreRows.length} Items</span>
+          <span className="text-xs text-stone-400 font-normal">Line Count: {calculatedStoreRows.length} Items</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -457,7 +442,7 @@ export default function CreateInvoicePage() {
             <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-semibold border-b border-stone-200 tracking-wider">
               {importSource === 'po' ? (
                 <tr>
-                  <th className="py-3 px-4 w-12 text-center">NO</th>
+                  <th className="py-3 px-4 w-12 text-center font-semibold">NO</th>
                   <th className="py-3 px-4 font-semibold">ITEM DESCRIPTION</th>
                   <th className="py-3 px-4 text-center w-20 font-semibold">QTY</th>
                   <th className="py-3 px-4 text-center w-20 font-semibold">UOM</th>
@@ -469,7 +454,7 @@ export default function CreateInvoicePage() {
                 </tr>
               ) : (
                 <tr>
-                  <th className="py-3 px-4 w-12 text-center">NO</th>
+                  <th className="py-3 px-4 w-12 text-center font-semibold">NO</th>
                   <th className="py-3 px-4 font-semibold">ITEM DESCRIPTION</th>
                   <th className="py-3 px-4 text-right w-36 font-semibold">DPP</th>
                   <th className="py-3 px-4 text-right w-36 font-semibold">DPP lainnya</th>
@@ -483,7 +468,7 @@ export default function CreateInvoicePage() {
               {calculatedStoreRows.map((row, idx) => (
                 <tr
                   key={row.id || idx}
-                  className="hover:bg-stone-50/50 transition-colors"
+                  className="hover:bg-stone-50/50 transition-colors font-normal"
                 >
                   <td className="py-3.5 px-4 text-center text-stone-400 font-mono">
                     {idx + 1}
@@ -497,7 +482,7 @@ export default function CreateInvoicePage() {
                       <td className="py-3.5 px-4 text-center font-mono font-bold text-stone-900">
                         {row.qty || 1}
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-amber-700 bg-amber-50 rounded-md uppercase">
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-stone-900 bg-stone-100 rounded-md uppercase">
                         {row.uom || 'PCS'}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
@@ -512,10 +497,10 @@ export default function CreateInvoicePage() {
                       <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap text-stone-900">
                         {formatRupiah(row.dpp)}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono text-stone-700 whitespace-nowrap font-normal">
                         {formatRupiah(row.nilaiBarang)}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-700 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono text-stone-700 whitespace-nowrap font-normal">
                         {formatRupiah(row.jasaCetak)}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
@@ -538,9 +523,8 @@ export default function CreateInvoicePage() {
               ))}
             </tbody>
 
-            {/* Total Footer Bawah Tabel */}
             {calculatedStoreRows.length > 0 && (
-              <tfoot className="bg-stone-50 border-t-2 border-stone-200 text-xs text-stone-900">
+              <tfoot className="bg-stone-50 border-t-2 border-stone-200 text-xs text-stone-900 font-normal">
                 {importSource === 'po' ? (
                   <tr className="font-bold">
                     <td colSpan={5} className="py-3 px-4 text-stone-700 uppercase tracking-wider text-[11px] font-extrabold">
@@ -560,7 +544,7 @@ export default function CreateInvoicePage() {
                       <td className="py-3 px-4 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
                         {formatRupiah(totalDppOverall)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-stone-700 whitespace-nowrap">
+                      <td className="py-3 px-4 text-right font-mono text-stone-700 whitespace-nowrap font-normal">
                         {formatRupiah(totalNilaiBarangOverall)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
@@ -572,7 +556,7 @@ export default function CreateInvoicePage() {
                       <td></td>
                     </tr>
 
-                    <tr className="font-extrabold border-t border-stone-200 bg-amber-50/40 text-stone-900">
+                    <tr className="font-extrabold border-t border-stone-200 bg-stone-100 text-stone-900">
                       <td colSpan={2} className="py-3 px-4 uppercase tracking-wider text-[11px]">
                         JASA CETAK:
                       </td>
@@ -592,8 +576,8 @@ export default function CreateInvoicePage() {
 
       {/* Kotak Rekapitulasi Nilai Bawah */}
       <div className="flex justify-end">
-        <div className="bg-white w-full sm:w-88 p-5 rounded-2xl border border-stone-200/80 shadow-xs space-y-2.5 text-xs">
-          <div className="flex justify-between items-center text-stone-600">
+        <div className="bg-white w-full sm:w-88 p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-2.5 text-xs">
+          <div className="flex justify-between items-center text-stone-600 font-normal">
             <span>TOTAL:</span>
             <span className="font-mono font-bold text-stone-900">
               {formatRupiah(importSource === 'po' ? totalPoNetOverall : totalDppOverall)}
@@ -601,19 +585,19 @@ export default function CreateInvoicePage() {
           </div>
 
           {isDppActive && (
-            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2 font-normal">
               <span>TOTAL DPP LAIN-LAIN:</span>
               <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalNilaiBarangOverall)}</span>
             </div>
           )}
 
-          <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+          <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2 font-normal">
             <span>VAT:</span>
             <span className="font-mono font-semibold text-stone-900">{formatRupiah(vatAmount)}</span>
           </div>
 
           {importSource !== 'po' && (
-            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2">
+            <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2 font-normal">
               <span>WHT:</span>
               <span className="font-mono font-semibold text-stone-900">-{formatRupiah(totalPph23Overall)}</span>
             </div>
@@ -621,7 +605,7 @@ export default function CreateInvoicePage() {
 
           <div className="flex justify-between items-center text-sm font-bold text-stone-900 border-t border-stone-200 pt-3">
             <span>GRAND TOTAL:</span>
-            <span className="font-mono font-bold text-amber-600">{formatRupiah(grandTotal)}</span>
+            <span className="font-mono font-bold text-stone-900">{formatRupiah(grandTotal)}</span>
           </div>
         </div>
       </div>

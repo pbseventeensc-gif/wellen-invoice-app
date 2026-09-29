@@ -46,7 +46,7 @@ export function parseCurrencyNumber(val) {
 // 2. DPP = Total Faktur / 1.11
 // 3. Nilai Barang = DPP * 90% (0.90)
 // 4. Jasa Cetak = DPP * 10% (0.10)
-// 5. WHT / PPH 23 = Jasa Cetak * 20% (0.20)
+// 5. WHT / PPH 23 = Jasa Cetak * 2% (0.02)
 // 6. DPP Nilai Lain Barang = Nilai Barang * (11 / 12)
 // 7. DPP Nilai Lain Jasa Cetak = Jasa Cetak * (11 / 12)
 // 8. PPN = (DPP Nilai Lain Barang + DPP Nilai Lain Jasa Cetak) * 12%
@@ -55,7 +55,7 @@ export function calculateFakturBreakdown(totalFaktur = 0) {
   const dpp = Math.round(faktur / 1.11);
   const nilaiBarang = Math.round(dpp * 0.90);
   const jasaCetak = Math.round(dpp * 0.10);
-  const pph23 = Math.round(jasaCetak * 0.20);
+  const pph23 = Math.round(jasaCetak * 0.02);
   const wht = pph23;
   const dppNilaiLainBarang = Math.round(nilaiBarang * (11 / 12));
   const dppNilaiLainJasaCetak = Math.round(jasaCetak * (11 / 12));

@@ -44,7 +44,6 @@ export default function ApprovalPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [profile, setProfile] = useState({ name: 'RISCA', role: 'Approval' });
 
-  // State untuk Modern Reject Modal
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
@@ -90,7 +89,7 @@ export default function ApprovalPage() {
         localStorage.setItem('wellen_approval_queue', JSON.stringify(INITIAL_APPROVAL_QUEUE));
       }
     } catch (err) {
-      console.error('Gagal membaca antrean approval:', err);
+      console.error('Failed to read approval queue:', err);
       setQueue([]);
     }
   };
@@ -142,7 +141,7 @@ export default function ApprovalPage() {
       });
       localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
     } catch (e) {
-      console.error('Gagal sinkron staging invoice:', e);
+      console.error('Failed to sync staging invoice:', e);
     }
 
     const nextQueue = queue.filter((q) => q.id !== invoiceToApprove.id);
@@ -154,14 +153,12 @@ export default function ApprovalPage() {
     alert(`Invoice ${invoiceToApprove.invoice_number} successfully approved!`);
   };
 
-  // Trigger buka modal modern
   const openRejectModal = (invoiceId) => {
     setRejectTargetId(invoiceId);
     setRejectReasonText('wrong quantity');
     setIsRejectModalOpen(true);
   };
 
-  // Eksekusi penolakan dengan alasan
   const confirmReject = () => {
     if (!rejectTargetId) return;
     const targetInvoice = queue.find((q) => q.id === rejectTargetId);
@@ -240,9 +237,9 @@ export default function ApprovalPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-12 relative">
-      <div>
+      <div className="pb-2 border-b border-stone-200/80">
         <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Approval Queue</h1>
-        <p className="text-xs text-stone-500 mt-1">
+        <p className="text-xs text-stone-500 mt-1 font-normal">
           Verify invoice details, DPP calculations, and overall amounts before final authorization.
         </p>
       </div>
@@ -258,7 +255,7 @@ export default function ApprovalPage() {
                 placeholder="Search WPK invoice or Client..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-800 placeholder:text-stone-400"
+                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 placeholder:text-stone-400 font-normal"
               />
             </div>
 
@@ -274,7 +271,7 @@ export default function ApprovalPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
+          <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
             <div className="p-3 bg-stone-50 border-b border-stone-200 flex justify-between items-center text-xs">
               <span className="font-bold text-stone-700 uppercase tracking-wider text-[10px]">
                 Pending Review ({filteredQueue.length})
@@ -284,7 +281,7 @@ export default function ApprovalPage() {
 
             <div className="max-h-[720px] overflow-y-auto divide-y divide-stone-100">
               {filteredQueue.length === 0 ? (
-                <div className="p-10 text-center text-stone-400 space-y-2">
+                <div className="p-10 text-center text-stone-400 space-y-2 font-normal">
                   <CheckCircle2 size={32} className="mx-auto text-emerald-500/80" />
                   <p className="text-xs font-medium text-stone-600">No active approval queue items.</p>
                 </div>
@@ -295,25 +292,25 @@ export default function ApprovalPage() {
                     <div
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`p-3 transition-colors cursor-pointer flex items-center justify-between gap-3 ${
+                      className={`p-3.5 transition-colors cursor-pointer flex items-center justify-between gap-3 ${
                         isSelected 
-                          ? 'bg-amber-50/70 border-l-4 border-l-amber-500' 
+                          ? 'bg-[#55e07e]/10 border-l-4 border-l-[#55e07e]'
                           : 'hover:bg-stone-50/80'
                       }`}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`font-mono text-xs font-bold ${isSelected ? 'text-amber-800' : 'text-stone-900'}`}>
+                          <span className={`font-mono text-xs font-bold ${isSelected ? 'text-stone-900' : 'text-stone-900'}`}>
                             {item.invoice_number}
                           </span>
-                          <span className="text-[9px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-md">
+                          <span className="text-[9px] font-semibold bg-[#55e07e]/20 text-stone-900 px-1.5 py-0.2 rounded-md">
                             Review
                           </span>
                         </div>
                         <p className="text-xs font-medium text-stone-800 truncate mt-0.5">
                           {item.client_name}
                         </p>
-                        <p className="text-[10px] text-stone-400 truncate">
+                        <p className="text-[10px] text-stone-400 truncate font-normal">
                           {item.promo_name || '-'}
                         </p>
                       </div>
@@ -322,7 +319,7 @@ export default function ApprovalPage() {
                         <p className="font-mono text-xs font-bold text-stone-900">
                           {formatRupiah(item.grand_total)}
                         </p>
-                        <span className="text-[10px] text-stone-400 block mt-0.5">
+                        <span className="text-[10px] text-stone-400 block mt-0.5 font-mono">
                           {item.invoice_date}
                         </span>
                       </div>
@@ -345,17 +342,17 @@ export default function ApprovalPage() {
         {/* KOLOM KANAN: PRATINJAU KERTAS FAKTUR */}
         <div className="col-span-12 lg:col-span-7">
           {activeInvoice ? (
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
               <div className="p-3.5 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
                 <div className="text-xs font-medium text-stone-600 flex items-center gap-1.5">
-                  <FileText size={15} className="text-amber-500" />
+                  <FileText size={15} className="text-stone-800" />
                   <span>Invoice Validation Sheet: <strong>{activeInvoice.invoice_number}</strong></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => openRejectModal(activeInvoice.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <X size={14} className="text-rose-600" />
                     Reject / Revise
@@ -363,7 +360,7 @@ export default function ApprovalPage() {
                   <button
                     type="button"
                     onClick={() => handleApprove(activeInvoice)}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold text-xs shadow-2xs transition-colors cursor-pointer"
                   >
                     <Check size={14} />
                     Approve
@@ -585,7 +582,6 @@ export default function ApprovalPage() {
 
                         return (
                           <>
-                            {/* 1. Stempel SVG */}
                             <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
                               <Image
                                 src="/stempel.svg"
@@ -596,7 +592,6 @@ export default function ApprovalPage() {
                               />
                             </div>
 
-                            {/* 2. Tanda Tangan Digital Otomatis (Tanita.svg vs risca.svg) */}
                             <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
                               <Image
                                 src={sigSrc}
@@ -615,7 +610,6 @@ export default function ApprovalPage() {
                     </div>
                   </div>
 
-                  {/* Note */}
                   <div className="border-t border-black pt-2.5">
                     <p className="text-black text-[10px] mb-1 font-bold">
                       Note :
@@ -633,7 +627,7 @@ export default function ApprovalPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white p-12 rounded-2xl border border-stone-200 text-center text-stone-400">
+            <div className="bg-white p-12 rounded-2xl border border-stone-200/80 text-center text-stone-400 font-normal">
               <FileText size={40} className="mx-auto text-stone-300 mb-2" />
               <p className="text-xs">No invoice selected for review.</p>
             </div>
@@ -641,10 +635,10 @@ export default function ApprovalPage() {
         </div>
       </div>
 
-      {/* MODERN ENTERPRISE REJECT MODAL */}
+      {/* REJECT MODAL */}
       {isRejectModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-md w-full p-6 space-y-5 overflow-hidden animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-md w-full p-6 space-y-5 overflow-hidden">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center shrink-0 border border-slate-200">
                 <AlertCircle size={20} />
@@ -656,7 +650,6 @@ export default function ApprovalPage() {
             </div>
 
             <div className="space-y-3">
-              {/* Quick Tags Pilihan Cepat */}
               <div className="flex flex-wrap gap-1.5">
                 {[
                   'wrong quantity',
@@ -679,7 +672,6 @@ export default function ApprovalPage() {
                 ))}
               </div>
 
-              {/* Textarea Custom */}
               <textarea
                 rows={3}
                 placeholder="Or type specific rejection details..."

@@ -10,7 +10,6 @@ import {
   Building2,
   User,
   ArrowUpDown,
-  Download,
   Clock,
   CreditCard,
   History,
@@ -80,15 +79,12 @@ export default function ApprovedInvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  // State untuk Sorting (Pengurutan Kolom)
   const [sortField, setSortField] = useState('invoice_date');
   const [sortDirection, setSortDirection] = useState('desc');
 
-  // State untuk Pagination (Skala Ratusan Data)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Ambil data invoice dari storage dan bersihkan duplikasi berdasarkan nomor invoice
   const loadInvoices = () => {
     try {
       const stored = localStorage.getItem('wellen_invoices');
@@ -106,7 +102,7 @@ export default function ApprovedInvoicesPage() {
         localStorage.setItem('wellen_invoices', JSON.stringify(DEFAULT_APPROVED));
       }
     } catch (e) {
-      console.error('Gagal memuat invoice:', e);
+      console.error('Failed to load invoices:', e);
       setInvoices([]);
     }
   };
@@ -117,11 +113,9 @@ export default function ApprovedInvoicesPage() {
     return () => window.removeEventListener('storage', loadInvoices);
   }, []);
 
-  // Filter list unik nama klien & nama pembuat (creator) untuk dropdown filter
   const clientList = ['ALL', ...Array.from(new Set(invoices.map((inv) => inv.client_name).filter(Boolean)))];
   const creatorList = ['ALL', ...Array.from(new Set(invoices.map((inv) => inv.ar_name || inv.created_by || 'FAHADA').filter(Boolean)))];
 
-  // Handler klik header untuk mengubah urutan (sorting)
   const handleSort = (field) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -131,7 +125,6 @@ export default function ApprovedInvoicesPage() {
     }
   };
 
-  // Filter & Sorting data
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
       const term = searchTerm.toLowerCase();
@@ -173,26 +166,21 @@ export default function ApprovedInvoicesPage() {
     });
   }, [invoices, searchTerm, selectedClient, selectedCreator, sortField, sortDirection]);
 
-  // Pagination Calculations
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
   const paginatedInvoices = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredInvoices.slice(start, start + pageSize);
   }, [filteredInvoices, currentPage, pageSize]);
 
-  // Hitung jumlah berkas yang belum di-download
   const pendingDownloadCount = invoices.filter((inv) => !inv.time_download).length;
-  // Hitung total akumulasi nominal
   const totalRevenue = filteredInvoices.reduce((sum, it) => sum + Number(it.grand_total || it.grandTotal || 0), 0);
 
-  // Payment Settlement Totals (Unpaid vs Paid)
   const paidInvoices = filteredInvoices.filter((i) => i.payment_status === 'paid');
   const unpaidInvoices = filteredInvoices.filter((i) => i.payment_status !== 'paid');
 
   const paidTotal = paidInvoices.reduce((sum, i) => sum + Number(i.grand_total || i.grandTotal || 0), 0);
   const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.grand_total || i.grandTotal || 0), 0);
 
-  // Toggle Status Pelunasan Payment (Unpaid <-> Paid)
   const handleTogglePaymentStatus = (id) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -215,10 +203,8 @@ export default function ApprovedInvoicesPage() {
     window.dispatchEvent(new Event('storage'));
   };
 
-  // State untuk Drawer Audit Log
   const [selectedAuditInvoice, setSelectedAuditInvoice] = useState(null);
 
-  // Export Rekap ke Excel
   const handleExportExcel = () => {
     if (filteredInvoices.length === 0) {
       alert('No data available for export.');
@@ -258,7 +244,7 @@ export default function ApprovedInvoicesPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Header Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Approved Invoices</h1>
@@ -273,16 +259,16 @@ export default function ApprovedInvoicesPage() {
 
         <button
           onClick={handleExportExcel}
-          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-normal px-3 py-1.5 rounded-lg text-xs shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-normal px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
         >
           <FileSpreadsheet size={14} />
           <span>Export Excel</span>
         </button>
       </div>
 
-      {/* Kartu Ringkasan Cepat (Warna Hitam, Tanpa Bold) */}
+      {/* Kartu Ringkasan Cepat */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             TOTAL INVOICES APPROVED
           </span>
@@ -296,7 +282,7 @@ export default function ApprovedInvoicesPage() {
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             AGGREGATE GROSS REVENUE
           </span>
@@ -305,7 +291,7 @@ export default function ApprovedInvoicesPage() {
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             PAID / SETTLED RECEIVABLES
           </span>
@@ -315,7 +301,7 @@ export default function ApprovedInvoicesPage() {
           <p className="text-[10px] text-stone-400 mt-1 font-normal">{paidInvoices.length} invoices settled</p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             OUTSTANDING UNPAID RECEIVABLES
           </span>
@@ -327,7 +313,7 @@ export default function ApprovedInvoicesPage() {
       </div>
 
       {/* Filter & Bar Pencarian */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs flex flex-wrap gap-3 items-center justify-between">
+      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs flex flex-wrap gap-3 items-center justify-between">
         <div className="relative flex-1 min-w-[280px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
@@ -338,12 +324,11 @@ export default function ApprovedInvoicesPage() {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 placeholder:text-stone-400 font-normal"
+            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#578ef5] text-stone-900 placeholder:text-stone-400 font-normal"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Filter Klien */}
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <Building2 size={14} className="text-stone-400" />
             <select
@@ -362,7 +347,6 @@ export default function ApprovedInvoicesPage() {
             </select>
           </div>
 
-          {/* Filter Created By */}
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <User size={14} className="text-stone-400" />
             <select
@@ -384,15 +368,14 @@ export default function ApprovedInvoicesPage() {
       </div>
 
       {/* Tabel Lengkap Approved Invoices */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-stone-50 text-stone-500 uppercase font-normal text-[10px] border-b border-stone-200 tracking-wider">
               <tr>
                 <th className="py-3.5 px-4 text-center w-12 font-normal">NO</th>
                 
-                {/* Header Tanggal */}
-                <th 
+                <th
                   onClick={() => handleSort('invoice_date')}
                   className="py-3.5 px-4 text-center w-28 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -402,8 +385,7 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header No Invoice */}
-                <th 
+                <th
                   onClick={() => handleSort('invoice_number')}
                   className="py-3.5 px-4 w-40 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -413,8 +395,7 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header Klien */}
-                <th 
+                <th
                   onClick={() => handleSort('client_name')}
                   className="py-3.5 px-4 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -424,8 +405,7 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header Created */}
-                <th 
+                <th
                   onClick={() => handleSort('ar_name')}
                   className="py-3.5 px-4 text-center w-28 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -435,8 +415,7 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header Approved Timestamp */}
-                <th 
+                <th
                   onClick={() => handleSort('time_approved')}
                   className="py-3.5 px-4 text-center w-36 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -446,11 +425,9 @@ export default function ApprovedInvoicesPage() {
                   </div>
                 </th>
 
-                {/* Header Status Pelunasan */}
                 <th className="py-3.5 px-4 text-center w-32 font-normal">PAYMENT</th>
 
-                {/* Header Nilai Net */}
-                <th 
+                <th
                   onClick={() => handleSort('total_harga_net')}
                   className="py-3.5 px-4 text-right w-36 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -462,8 +439,7 @@ export default function ApprovedInvoicesPage() {
 
                 <th className="py-3.5 px-4 text-right w-28 font-normal">VAT</th>
 
-                {/* Header Grand Total */}
-                <th 
+                <th
                   onClick={() => handleSort('grand_total')}
                   className="py-3.5 px-4 text-right w-36 font-normal cursor-pointer hover:text-stone-950 transition-colors select-none"
                 >
@@ -488,7 +464,7 @@ export default function ApprovedInvoicesPage() {
                 paginatedInvoices.map((row, idx) => {
                   const globalIdx = (currentPage - 1) * pageSize + idx + 1;
                   return (
-                    <tr key={row.id || idx} className="hover:bg-amber-50/20 transition-colors font-normal">
+                    <tr key={row.id || idx} className="hover:bg-[#578ef5]/10 transition-colors font-normal">
                       <td className="py-3.5 px-4 text-center text-stone-400 font-mono">{globalIdx}</td>
 
                       <td className="py-3.5 px-4 text-center text-stone-600 font-mono text-[11px] whitespace-nowrap">
@@ -507,7 +483,6 @@ export default function ApprovedInvoicesPage() {
                         {row.ar_name || row.created_by || 'FAHADA'}
                       </td>
 
-                      {/* Kolom Approved Timestamp */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {row.time_approved || row.time_created ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
@@ -520,7 +495,6 @@ export default function ApprovedInvoicesPage() {
                         )}
                       </td>
 
-                      {/* Kolom Payment Settlement Toggle */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <button
                           type="button"
@@ -533,7 +507,7 @@ export default function ApprovedInvoicesPage() {
                               <CreditCard size={11} /> Paid
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-300 text-[10px] px-2.5 py-0.5 rounded-full font-medium">
+                            <span className="inline-flex items-center gap-1 bg-[#578ef5]/10 text-[#578ef5] border border-[#578ef5]/30 text-[10px] px-2.5 py-0.5 rounded-full font-medium">
                               <Clock size={11} /> Unpaid
                             </span>
                           )}
@@ -555,7 +529,6 @@ export default function ApprovedInvoicesPage() {
                         </span>
                       </td>
 
-                      {/* Kolom Aksi */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
@@ -572,7 +545,7 @@ export default function ApprovedInvoicesPage() {
                               setSelectedInvoice(row);
                               setIsPrintModalOpen(true);
                             }}
-                            className="p-1.5 bg-stone-100 hover:bg-amber-500 hover:text-stone-950 text-stone-700 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 bg-stone-100 hover:bg-[#578ef5] hover:text-white text-stone-700 rounded-lg transition-colors cursor-pointer"
                             title="Print A4 Invoice"
                           >
                             <Printer size={14} />
@@ -607,7 +580,7 @@ export default function ApprovedInvoicesPage() {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                  className="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none focus:border-[#578ef5] cursor-pointer shadow-2xs"
                 >
                   <option value={10}>10</option>
                   <option value={25}>25</option>
@@ -657,7 +630,7 @@ export default function ApprovedInvoicesPage() {
                           onClick={() => setCurrentPage(page)}
                           className={`w-7 h-7 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
                             currentPage === page
-                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              ? 'bg-[#578ef5] text-white shadow-2xs'
                               : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-50'
                           }`}
                         >
@@ -691,10 +664,10 @@ export default function ApprovedInvoicesPage() {
         )}
       </div>
 
-      {/* Modal Drawer Audit Trail History Log */}
+      {/* Audit Trail Drawer */}
       {selectedAuditInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200/90 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200/90">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <History className="text-slate-700" size={18} />
@@ -723,7 +696,6 @@ export default function ApprovedInvoicesPage() {
               </div>
             </div>
 
-            {/* Timeline Events */}
             <div className="space-y-3 pt-2 text-xs">
               <div className="flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-slate-800 mt-1 shrink-0" />

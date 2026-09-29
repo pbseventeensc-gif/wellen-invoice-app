@@ -24,7 +24,6 @@ export default function ImportExcelTab() {
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Handler Unggah & Parse File Excel
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -45,7 +44,6 @@ export default function ImportExcelTab() {
         let commonClientName = '';
         let dupCounter = 0;
 
-        // Ambil data penyimpanan dari localStorage untuk proteksi duplikasi mutlak
         const existingApproved = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
         const existingQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
         const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
@@ -60,18 +58,15 @@ export default function ImportExcelTab() {
               clean[k.trim().toLowerCase()] = row[k];
             });
 
-            // 1. Ambil No Faktur / WPP
             const noFaktur = String(
               clean['no faktur'] || clean['faktur'] || clean['no wpp'] || clean['wpp'] || clean['nomor faktur'] || `WPP-${Date.now()}-${index}`
             ).trim();
 
-            // 2. Ambil Customer / Klien
             const customer = clean['customer ant'] || clean['customer'] || clean['klien'] || clean['nama pt'] || clean['pt'] || '';
             if (customer && !commonClientName) {
               commonClientName = customer.trim();
             }
 
-            // 3. Pecah Keterangan menjadi Promo & Store Name
             const rawKeterangan = String(clean['keterangan'] || clean['deskripsi'] || clean['item description'] || '').trim();
             let fileNamePromo = rawKeterangan;
             let storeName = rawKeterangan;
@@ -86,7 +81,6 @@ export default function ImportExcelTab() {
               commonPromoName = fileNamePromo;
             }
 
-            // 4. Cari nilai Grand Total / Total Faktur dari berbagai kemungkinan nama kolom Excel
             let rawTotalVal =
               clean['grand total'] ??
               clean['grandtotal'] ??
@@ -106,7 +100,6 @@ export default function ImportExcelTab() {
               clean['netto'] ??
               clean['total netto'];
 
-            // Fallback: Jika nilai belum ketemu/0, cari di semua kolom non-ID
             if (rawTotalVal === undefined || rawTotalVal === '' || rawTotalVal === null || parseCurrencyNumber(rawTotalVal) === 0) {
               for (const k of Object.keys(clean)) {
                 if (k.includes('no') || k.includes('code') || k.includes('date') || k.includes('id') || k.includes('qty')) {
@@ -123,7 +116,6 @@ export default function ImportExcelTab() {
             const rawTotalFaktur = parseCurrencyNumber(rawTotalVal);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 
-            // 5. Pengecekan Duplikasi Ketat
             const cleanFaktur = noFaktur.toLowerCase();
             const cleanStore = storeName.toLowerCase();
 
@@ -306,7 +298,6 @@ export default function ImportExcelTab() {
   const validFilteredRows = filteredRows.filter((r) => !r.isDuplicate);
   const isAllSelected = validFilteredRows.length > 0 && validFilteredRows.every((r) => selectedIds.includes(r.id));
 
-  // Hitung Total Ringkasan
   const selectedRowsList = importedRows.filter((r) => selectedIds.includes(r.id));
   const rowsToSum = selectedRowsList.length > 0 ? selectedRowsList : filteredRows;
 
@@ -322,7 +313,7 @@ export default function ImportExcelTab() {
   return (
     <div className="space-y-4">
       {/* Kotak Upload Excel */}
-      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-amber-400 transition-colors shadow-xs">
+      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-[#55e07e] transition-colors shadow-xs">
         <input
           type="file"
           id="excelUpload"
@@ -331,7 +322,7 @@ export default function ImportExcelTab() {
           className="hidden"
         />
         <label htmlFor="excelUpload" className="cursor-pointer flex items-center justify-center gap-4">
-          <div className="p-2 bg-amber-50/80 rounded-full text-amber-500 shrink-0">
+          <div className="p-2 bg-[#55e07e]/10 rounded-full text-[#55e07e] shrink-0">
             <UploadCloud size={22} />
           </div>
           <div className="text-left">
@@ -402,7 +393,7 @@ export default function ImportExcelTab() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search Invoice No or Store..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg outline-none focus:border-amber-500 focus:bg-white text-stone-800 placeholder:text-stone-400 transition-colors"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg outline-none focus:border-[#55e07e] focus:bg-white text-stone-800 placeholder:text-stone-400 transition-colors"
                 />
               </div>
 
@@ -412,11 +403,11 @@ export default function ImportExcelTab() {
                 disabled={selectedIds.length === 0}
                 className={`inline-flex items-center gap-2 font-bold px-3.5 py-1.5 rounded-lg text-xs shadow-xs transition-colors shrink-0 ${
                   selectedIds.length > 0
-                    ? 'bg-amber-500 hover:bg-amber-600 text-stone-950 cursor-pointer'
+                    ? 'bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 cursor-pointer'
                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                 }`}
               >
-                <span>Process Selected Stores ({selectedIds.length})</span>
+                <span>Process ({selectedIds.length})</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -432,8 +423,8 @@ export default function ImportExcelTab() {
                       onClick={handleToggleSelectAll}
                       className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors mx-auto ${
                         isAllSelected
-                          ? 'bg-amber-500 border-amber-500 text-white'
-                          : 'border-stone-300 hover:border-amber-400 bg-white'
+                          ? 'bg-[#55e07e] border-[#55e07e] text-stone-950 font-bold'
+                          : 'border-stone-300 hover:border-[#55e07e] bg-white'
                       }`}
                       title={isAllSelected ? 'Deselect all' : 'Select all valid stores'}
                     >
@@ -473,7 +464,7 @@ export default function ImportExcelTab() {
                           isDup
                             ? 'bg-rose-50 text-rose-950 font-medium'
                             : isSelected
-                            ? 'bg-amber-50/20'
+                            ? 'bg-[#55e07e]/10'
                             : 'hover:bg-stone-50/40'
                         }`}
                       >
@@ -486,8 +477,8 @@ export default function ImportExcelTab() {
                               isDup
                                 ? 'bg-rose-200 border-rose-300 cursor-not-allowed text-transparent'
                                 : isSelected
-                                ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
-                                : 'border-stone-300 hover:border-amber-400 bg-white'
+                                ? 'bg-[#55e07e] border-[#55e07e] text-stone-950 font-bold shadow-xs'
+                                : 'border-stone-300 hover:border-[#55e07e] bg-white'
                             }`}
                           >
                             {isSelected && !isDup && <Check size={10} strokeWidth={3} />}
@@ -547,7 +538,6 @@ export default function ImportExcelTab() {
                 )}
               </tbody>
 
-              {/* Baris Total Ringkasan sticky bottom */}
               {filteredRows.length > 0 && (
                 <tfoot className="sticky bottom-0 z-10 bg-stone-100 border-t-2 border-stone-200 text-stone-900 font-bold text-xs shadow-xs">
                   <tr>

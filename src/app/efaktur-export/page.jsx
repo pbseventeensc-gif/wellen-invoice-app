@@ -2,16 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Building2,
   Download,
   FileSpreadsheet,
-  FileCheck2,
-  CheckCircle2,
   Search,
-  Layers,
-  ShieldCheck,
-  ArrowUpDown,
-  Check
+  ShieldCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
@@ -22,7 +16,6 @@ export default function EfakturExportPage() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [nsfpStart, setNsfpStart] = useState('010.000-26.00000001');
 
-  // NPWP Klien Map state (bisa diedit di tabel)
   const [npwpMap, setNpwpMap] = useState({
     'PT. Foods Beverages Indonesia': '01.345.678.9-012.000',
     'PT ASPIRASI HIDUP INDONESIA TBK': '01.234.567.8-011.000',
@@ -42,7 +35,7 @@ export default function EfakturExportPage() {
         setInvoices([]);
       }
     } catch (e) {
-      console.error('Gagal memuat data faktur:', e);
+      console.error('Failed to load invoice data:', e);
       setInvoices([]);
     }
   };
@@ -60,7 +53,6 @@ export default function EfakturExportPage() {
     }));
   };
 
-  // Filter Invoice Terpilih
   const filteredInvoices = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return invoices.filter((inv) => {
@@ -74,7 +66,6 @@ export default function EfakturExportPage() {
     return filteredInvoices.filter((inv) => selectedIds.includes(inv.id));
   }, [filteredInvoices, selectedIds]);
 
-  // Total Nilai Pajak
   const totalDpp = useMemo(() => {
     return selectedInvoices.reduce((sum, i) => sum + Number(i.subtotal_net || i.total_harga_net || 0), 0);
   }, [selectedInvoices]);
@@ -97,7 +88,6 @@ export default function EfakturExportPage() {
     );
   };
 
-  // Ekspor CSV Standar Format e-Faktur DJP (Faktur Pajak Keluaran FK)
   const handleExportDjpCsv = () => {
     if (selectedInvoices.length === 0) {
       alert('Please select at least one approved invoice to export e-Faktur CSV.');
@@ -134,7 +124,6 @@ export default function EfakturExportPage() {
     document.body.removeChild(link);
   };
 
-  // Ekspor Rekap e-Faktur ke Excel
   const handleExportExcel = () => {
     if (selectedInvoices.length === 0) {
       alert('Please select at least one invoice to export Excel.');
@@ -168,15 +157,15 @@ export default function EfakturExportPage() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-5 pb-20 font-sans text-slate-800 antialiased">
-      {/* Header Navigasi & Judul Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200/80 gap-3">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans text-stone-900 antialiased">
+      {/* Header Navigasi */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-stone-200/80 gap-3">
         <div>
-          <div className="text-[12px] text-slate-400">
-            Tax & Compliance &rsaquo; <span className="text-slate-600">DJP e-Faktur Pajak Exporter</span>
+          <div className="text-[12px] text-stone-400 font-normal">
+            Tax & Compliance &rsaquo; <span className="text-stone-600">DJP e-Faktur Pajak Exporter</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">DJP e-Faktur Pajak Exporter</h1>
-          <p className="text-xs text-slate-500 mt-0.5 font-normal">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight mt-0.5">DJP e-Faktur Pajak Exporter</h1>
+          <p className="text-xs text-stone-500 mt-0.5 font-normal">
             Export approved taxable invoices directly to DJP e-Faktur CSV format (Faktur Pajak Keluaran FK) for DJP Online filing.
           </p>
         </div>
@@ -185,7 +174,7 @@ export default function EfakturExportPage() {
           <button
             type="button"
             onClick={handleExportExcel}
-            className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-normal px-3 py-1.5 rounded-lg text-xs shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-normal px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
           >
             <FileSpreadsheet size={14} />
             <span>Export Excel</span>
@@ -194,7 +183,7 @@ export default function EfakturExportPage() {
           <button
             type="button"
             onClick={handleExportDjpCsv}
-            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-normal px-3 py-1.5 rounded-lg text-xs shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-normal px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
           >
             <Download size={14} />
             <span>Export CSV</span>
@@ -202,79 +191,79 @@ export default function EfakturExportPage() {
         </div>
       </div>
 
-      {/* 4 Kartu Ringkasan Indikator Pajak e-Faktur (Warna Hitam, Tanpa Bold) */}
+      {/* 4 Kartu Ringkasan Indikator Pajak */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-wider block mb-1">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
+          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             SELECTED TAXABLE INVOICES (PKP)
           </span>
-          <p className="text-xl font-mono text-slate-900 font-normal">
-            {selectedInvoices.length} <span className="text-xs font-normal text-slate-500">Documents</span>
+          <p className="text-xl font-mono text-stone-900 font-normal">
+            {selectedInvoices.length} <span className="text-xs font-normal text-stone-500">Documents</span>
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-wider block mb-1">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
+          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             TOTAL NET VALUE (DPP PAJAK)
           </span>
-          <p className="text-xl font-mono text-slate-900 font-normal">
+          <p className="text-xl font-mono text-stone-900 font-normal">
             {formatRupiah(totalDpp)}
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-wider block mb-1">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
+          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             TOTAL PPN KELUARAN (11%)
           </span>
-          <p className="text-xl font-mono text-slate-900 font-normal">
+          <p className="text-xl font-mono text-stone-900 font-normal">
             {formatRupiah(totalPpn)}
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-          <span className="text-[10px] font-normal text-slate-400 uppercase tracking-wider block mb-1">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
+          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
             NSFP START NUMBER RANGE
           </span>
           <input
             type="text"
             value={nsfpStart}
             onChange={(e) => setNsfpStart(e.target.value)}
-            className="w-full mt-1 font-mono text-xs font-normal px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400"
+            className="w-full mt-1 font-mono text-xs font-normal px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-stone-900 focus:outline-none focus:border-[#578ef5]"
           />
         </div>
       </div>
 
       {/* Bar Pencarian & Filter */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-stone-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="relative flex-1 min-w-[300px]">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search WPP Invoice number or Client PT Entity..."
-            className="w-full text-xs pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 text-slate-900 placeholder:text-slate-400 font-normal"
+            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#578ef5] text-stone-900 placeholder:text-stone-400 font-normal"
           />
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-normal text-slate-600">
+        <div className="flex items-center gap-2 text-xs font-normal text-stone-600">
           <ShieldCheck size={16} className="text-emerald-600" />
           <span>Validated for DJP Online e-Faktur Import</span>
         </div>
       </div>
 
-      {/* Tabel Data e-Faktur Keluaran (Teks Hitam, Tanpa Bold) */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+      {/* Tabel Data e-Faktur Keluaran */}
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 text-slate-500 uppercase font-normal text-[10px] border-b border-slate-200 tracking-wider">
+            <thead className="bg-stone-50 text-stone-500 uppercase font-normal text-[10px] border-b border-stone-200 tracking-wider">
               <tr>
                 <th className="py-3.5 px-4 text-center w-12 font-normal">
                   <input
                     type="checkbox"
                     checked={filteredInvoices.length > 0 && selectedIds.length === filteredInvoices.length}
                     onChange={handleToggleSelectAll}
-                    className="rounded border-slate-300 text-slate-700 focus:ring-slate-400 cursor-pointer"
+                    className="rounded border-stone-300 text-stone-700 focus:ring-[#578ef5] cursor-pointer"
                   />
                 </th>
                 <th className="py-3.5 px-4 text-center w-12 font-normal">NO</th>
@@ -288,10 +277,10 @@ export default function EfakturExportPage() {
                 <th className="py-3.5 px-4 text-center w-40 font-normal">NSFP GENERATED</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-normal">
+            <tbody className="divide-y divide-stone-100 font-normal">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400 font-normal">
+                  <td colSpan={10} className="py-12 text-center text-stone-400 font-normal">
                     No approved invoices found for e-Faktur export.
                   </td>
                 </tr>
@@ -307,7 +296,7 @@ export default function EfakturExportPage() {
                     <tr
                       key={inv.id || idx}
                       className={`transition-colors ${
-                        isSelected ? 'bg-amber-50/20' : 'hover:bg-slate-50/60 opacity-60'
+                        isSelected ? 'bg-[#578ef5]/10' : 'hover:bg-stone-50/60 opacity-60'
                       }`}
                     >
                       <td className="py-3.5 px-4 text-center">
@@ -315,17 +304,17 @@ export default function EfakturExportPage() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleToggleSelect(inv.id)}
-                          className="rounded border-slate-300 text-slate-700 focus:ring-slate-400 cursor-pointer"
+                          className="rounded border-stone-300 text-stone-700 focus:ring-[#578ef5] cursor-pointer"
                         />
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono text-slate-400 font-normal">{idx + 1}</td>
-                      <td className="py-3.5 px-4 font-mono text-slate-600 whitespace-nowrap font-normal">
+                      <td className="py-3.5 px-4 text-center font-mono text-stone-400 font-normal">{idx + 1}</td>
+                      <td className="py-3.5 px-4 font-mono text-stone-600 whitespace-nowrap font-normal">
                         {inv.invoice_date || inv.time_created?.slice(0, 10)}
                       </td>
-                      <td className="py-3.5 px-4 font-mono font-normal text-slate-900 whitespace-nowrap">
+                      <td className="py-3.5 px-4 font-mono font-normal text-stone-900 whitespace-nowrap">
                         {inv.invoice_number}
                       </td>
-                      <td className="py-3.5 px-4 font-normal text-slate-900 max-w-xs truncate">
+                      <td className="py-3.5 px-4 font-normal text-stone-900 max-w-xs truncate">
                         {inv.client_name}
                       </td>
                       <td className="py-3.5 px-4">
@@ -333,20 +322,20 @@ export default function EfakturExportPage() {
                           type="text"
                           value={npwpMap[inv.client_name] || '01.234.567.8-012.000'}
                           onChange={(e) => handleNpwpChange(inv.client_name, e.target.value)}
-                          className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-normal text-slate-800 outline-none focus:border-slate-400 focus:bg-white"
+                          className="w-full px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-normal text-stone-800 outline-none focus:border-[#578ef5] focus:bg-white"
                         />
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono text-slate-900 font-normal whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono text-stone-900 font-normal whitespace-nowrap">
                         {formatRupiah(inv.subtotal_net || inv.total_harga_net || 0)}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-normal text-slate-900 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono font-normal text-stone-900 whitespace-nowrap">
                         {formatRupiah(inv.ppn_amount || 0)}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-mono font-normal text-slate-900 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono font-normal text-stone-900 whitespace-nowrap">
                         {formatRupiah(inv.grand_total || inv.grandTotal || 0)}
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs font-normal text-slate-900 whitespace-nowrap">
-                        <span className="bg-slate-100 text-slate-900 px-2.5 py-1 rounded-md border border-slate-200 font-normal">
+                      <td className="py-3.5 px-4 text-center font-mono text-xs font-normal text-stone-900 whitespace-nowrap">
+                        <span className="bg-stone-100 text-stone-900 px-2.5 py-1 rounded-md border border-stone-200 font-normal">
                           {generatedNsfp}
                         </span>
                       </td>

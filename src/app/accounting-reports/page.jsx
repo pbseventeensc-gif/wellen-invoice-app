@@ -28,7 +28,6 @@ export default function AccountingReportsPage() {
   const [startDate, setStartDate] = useState('2026-09-01');
   const [endDate, setEndDate] = useState('2026-09-30');
 
-  // Ambil data faktur yang sudah sah dari localStorage
   const loadData = () => {
     try {
       const stored = localStorage.getItem('wellen_invoices');
@@ -39,7 +38,7 @@ export default function AccountingReportsPage() {
         setInvoices([]);
       }
     } catch (e) {
-      console.error('Gagal memuat data faktur:', e);
+      console.error('Failed to load invoice data:', e);
       setInvoices([]);
     }
   };
@@ -50,7 +49,6 @@ export default function AccountingReportsPage() {
     return () => window.removeEventListener('storage', loadData);
   }, []);
 
-  // Perhitungan Nilai Finansial Riil
   const totalOmzetVal = useMemo(() => {
     return invoices.reduce((sum, i) => sum + Number(i.grand_total || i.grandTotal || 0), 0);
   }, [invoices]);
@@ -63,7 +61,6 @@ export default function AccountingReportsPage() {
     return new Set(invoices.map((i) => i.client_name).filter(Boolean));
   }, [invoices]);
 
-  // Klasifikasi Pajak (Faktur PPN PKP vs Non-PPN)
   const pkpInvoices = useMemo(() => invoices.filter((i) => Number(i.ppn_amount || 0) > 0), [invoices]);
   const nonPkpInvoices = useMemo(() => invoices.filter((i) => Number(i.ppn_amount || 0) === 0), [invoices]);
 
@@ -77,7 +74,6 @@ export default function AccountingReportsPage() {
 
   const pkpPct = totalInvoicesCount > 0 ? Math.round((pkpInvoices.length / totalInvoicesCount) * 100) : 100;
 
-  // Ekspor Rekap Akuntansi ke Excel
   const handleExport = () => {
     if (invoices.length === 0) {
       alert('No invoice data available for export.');
@@ -98,7 +94,6 @@ export default function AccountingReportsPage() {
     XLSX.writeFile(wb, `Accounting_Reports_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  // Periode 6 Bulan Terakhir
   const monthlyData = useMemo(() => {
     const months = [
       { key: '2026-05', label: 'May 2026' },
@@ -134,7 +129,6 @@ export default function AccountingReportsPage() {
     return Math.max(highest * 1.25, 10000000);
   }, [monthlyData]);
 
-  // Perhitungan Koordinat Dinamis Grafik SVG
   const chartHeight = 180;
   const chartTop = 30;
   const xPoints = [80, 212, 344, 476, 608, 740];
@@ -157,14 +151,14 @@ export default function AccountingReportsPage() {
   );
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-4 pb-20 font-sans text-slate-800 antialiased">
-      {/* Header Navigasi & Pilihan Akun */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200/80 gap-3">
+    <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans text-stone-900 antialiased">
+      {/* Header Navigasi */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-stone-200/80 gap-3">
         <div>
-          <div className="text-[12px] text-slate-400">
-            Accounting &rsaquo; <span className="text-slate-600">Financial Reports & Receivables</span>
+          <div className="text-[12px] text-stone-400 font-normal">
+            Accounting &rsaquo; <span className="text-stone-600">Financial Reports & Receivables</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">Financial Reports & Invoice Summary</h1>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight mt-0.5">Financial Reports & Invoice Summary</h1>
         </div>
 
         <div>
@@ -172,126 +166,110 @@ export default function AccountingReportsPage() {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="appearance-none bg-white border border-slate-300 text-slate-700 text-xs font-medium pl-3 pr-8 py-1.5 rounded-lg shadow-2xs focus:outline-none focus:border-amber-500 cursor-pointer"
+              className="appearance-none bg-white border border-stone-300 text-stone-700 text-xs font-medium pl-3 pr-8 py-2 rounded-xl shadow-2xs focus:outline-none focus:border-[#578ef5] cursor-pointer"
             >
               <option value="accounting">View as Accounting Team</option>
               <option value="finance-lead">View as Finance Lead</option>
               <option value="auditor">View as Auditor</option>
             </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
           </div>
         </div>
       </div>
 
-      {/* 4 Kartu Indikator Utama (KPI Akuntansi) - Ringkas, Kompak & Proporsional */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Total Nilai Tagihan Bruto */}
-        <div className="bg-white p-3 px-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors">
+      {/* 4 Kartu Indikator Utama */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs hover:border-stone-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <span className="p-0.5 rounded bg-amber-50 text-amber-600">
-                <ReceiptText size={13} />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+              <span className="p-1 rounded-lg bg-[#578ef5]/10 text-[#578ef5]">
+                <ReceiptText size={14} />
               </span>
               Total Billing Value
             </span>
-            <button type="button" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 text-[10px] font-normal text-slate-400 hover:bg-slate-50 cursor-pointer">
-              Details <ChevronDown size={10} />
-            </button>
           </div>
-          <p className="text-lg font-bold tracking-tight text-slate-900 mt-1.5 font-mono">
+          <p className="text-xl font-bold tracking-tight text-stone-900 mt-2 font-mono">
             {formatRupiah(totalOmzetVal)}
           </p>
         </div>
 
-        {/* Total Dokumen Faktur Disetujui */}
-        <div className="bg-white p-3 px-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs hover:border-stone-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <span className="p-0.5 rounded bg-amber-50 text-amber-600">
-                <FileCheck size={13} />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+              <span className="p-1 rounded-lg bg-stone-100 text-stone-700">
+                <FileCheck size={14} />
               </span>
               Approved Invoices
             </span>
-            <button type="button" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 text-[10px] font-normal text-slate-400 hover:bg-slate-50 cursor-pointer">
-              Details <ChevronDown size={10} />
-            </button>
           </div>
-          <p className="text-lg font-bold tracking-tight text-slate-900 mt-1.5 font-mono">
+          <p className="text-xl font-bold tracking-tight text-stone-900 mt-2 font-mono">
             {totalInvoicesCount}
           </p>
         </div>
 
-        {/* Realisasi Berkas Siap Cetak / Unduh */}
-        <div className="bg-white p-3 px-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs hover:border-stone-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <span className="p-0.5 rounded bg-emerald-50 text-emerald-600">
-                <CheckCheck size={13} />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+              <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600">
+                <CheckCheck size={14} />
               </span>
               Realization Rate
             </span>
-            <button type="button" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 text-[10px] font-normal text-slate-400 hover:bg-slate-50 cursor-pointer">
-              Details <ChevronDown size={10} />
-            </button>
           </div>
-          <p className="text-lg font-bold tracking-tight text-slate-900 mt-1.5 font-mono">
+          <p className="text-xl font-bold tracking-tight text-stone-900 mt-2 font-mono">
             {realizationRate}%
           </p>
         </div>
 
-        {/* Entitas Klien Aktif */}
-        <div className="bg-white p-3 px-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs hover:border-stone-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <span className="p-0.5 rounded bg-sky-50 text-sky-600">
-                <Building2 size={13} />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+              <span className="p-1 rounded-lg bg-stone-100 text-stone-700">
+                <Building2 size={14} />
               </span>
               Registered Clients
             </span>
-            <button type="button" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 text-[10px] font-normal text-slate-400 hover:bg-slate-50 cursor-pointer">
-              Details <ChevronDown size={10} />
-            </button>
           </div>
-          <p className="text-lg font-bold tracking-tight text-slate-900 mt-1.5 font-mono">
+          <p className="text-xl font-bold tracking-tight text-stone-900 mt-2 font-mono">
             {activeClientsSet.size}
           </p>
         </div>
       </div>
 
-      {/* Ikhtisar Pendapatan & Berkas Faktur Per Periode */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        <div className="p-3.5 px-5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+      {/* Ikhtisar Pendapatan & Grafik */}
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
+        <div className="p-4 px-5 border-b border-stone-200/80 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="text-[13px] font-bold text-slate-900">Revenue & Invoice Overview</span>
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <span className="text-sm font-bold text-stone-900">Revenue & Invoice Overview</span>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-400 uppercase tracking-wider">
               <span>RANGE</span>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 onClick={(e) => e.target.showPicker?.()}
-                className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 focus:outline-none focus:border-amber-500 cursor-pointer"
+                className="px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono text-stone-700 focus:outline-none focus:border-[#578ef5] cursor-pointer"
               />
-              <span className="text-slate-300">–</span>
+              <span className="text-stone-300">–</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 onClick={(e) => e.target.showPicker?.()}
-                className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 focus:outline-none focus:border-amber-500 cursor-pointer"
+                className="px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono text-stone-700 focus:outline-none focus:border-[#578ef5] cursor-pointer"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs">
+            <div className="flex items-center bg-stone-100 p-0.5 rounded-lg border border-stone-200/80 text-xs">
               <button
                 type="button"
                 onClick={() => setPeriodFilter('month')}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
                   periodFilter === 'month'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#578ef5] text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Monthly
@@ -301,8 +279,8 @@ export default function AccountingReportsPage() {
                 onClick={() => setPeriodFilter('year')}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
                   periodFilter === 'year'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#578ef5] text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
                 Yearly
@@ -320,18 +298,17 @@ export default function AccountingReportsPage() {
           </div>
         </div>
 
-        {/* Grafik Kombinasi SVG (Line & Bar Chart) - Bersih & Tanpa Tumpuk Teks */}
+        {/* Grafik Kombinasi SVG */}
         <div className="p-6 overflow-x-auto">
           <div className="min-w-[780px]">
             <svg viewBox="0 0 820 270" className="w-full h-auto overflow-visible font-sans">
               <defs>
-                <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.15" />
+                <linearGradient id="barGradSoft" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#578ef5" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#578ef5" stopOpacity="0.15" />
                 </linearGradient>
               </defs>
 
-              {/* Grid Horizontal */}
               {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                 const y = chartTop + chartHeight * (1 - ratio);
                 return (
@@ -341,7 +318,6 @@ export default function AccountingReportsPage() {
                 );
               })}
 
-              {/* Bar Chart Revenue (Hanya digambar bila revenue > 0) */}
               {plotPoints.map((p, i) => (
                 p.revenue > 0 ? (
                   <g key={i}>
@@ -351,14 +327,14 @@ export default function AccountingReportsPage() {
                       width="40"
                       height={Math.max(p.barH, 4)}
                       rx="6"
-                      fill="url(#barGrad)"
+                      fill="url(#barGradSoft)"
                       className="transition-all hover:opacity-100 opacity-85"
                     />
                     <text
                       x={p.x}
                       y={Math.max(p.yBar - 8, 18)}
                       textAnchor="middle"
-                      className="text-[11px] font-mono font-bold fill-amber-700"
+                      className="text-[11px] font-mono font-bold fill-[#578ef5]"
                     >
                       {fmtShort(p.revenue)}
                     </text>
@@ -366,7 +342,6 @@ export default function AccountingReportsPage() {
                 ) : null
               ))}
 
-              {/* Line Chart Volume Invoices */}
               <path
                 d={linePath}
                 fill="none"
@@ -376,10 +351,8 @@ export default function AccountingReportsPage() {
                 strokeLinejoin="round"
               />
 
-              {/* Dot Markers ("Bulat-bulat" Biru Tajam & Terang) */}
               {plotPoints.map((p, i) => (
                 <g key={i} className="group cursor-pointer">
-                  {/* Outer Glow Halo Ring */}
                   <circle
                     cx={p.x}
                     cy={p.yLine}
@@ -388,7 +361,6 @@ export default function AccountingReportsPage() {
                     fillOpacity="0.18"
                     className="group-hover:scale-150 transition-transform origin-center"
                   />
-                  {/* Lingkaran Bulat Utama */}
                   <circle
                     cx={p.x}
                     cy={p.yLine}
@@ -397,26 +369,24 @@ export default function AccountingReportsPage() {
                     stroke="#ffffff"
                     strokeWidth="2.5"
                   />
-                  {/* Label Teks Jumlah Inv (Tepat di atas titik bulat) */}
                   <text
                     x={p.x}
                     y={p.yLine - 14}
                     textAnchor="middle"
-                    className="text-[11px] font-mono font-bold fill-slate-700"
+                    className="text-[11px] font-mono font-bold fill-stone-700"
                   >
                     {p.count} inv
                   </text>
                 </g>
               ))}
 
-              {/* Sumbu X Label Bulan */}
               {monthlyData.map((d, i) => (
                 <text
                   key={i}
                   x={xPoints[i]}
                   y="245"
                   textAnchor="middle"
-                  className="text-[11px] font-semibold fill-slate-500 font-sans"
+                  className="text-[11px] font-semibold fill-stone-500 font-sans"
                 >
                   {d.label}
                 </text>
@@ -426,33 +396,31 @@ export default function AccountingReportsPage() {
         </div>
       </div>
 
-      {/* Diagram Lingkaran Klasifikasi Pajak & Realisasi Cetak */}
+      {/* Diagram Lingkaran Klasifikasi Pajak */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Diagram Lingkaran Pajak PPN PKP vs Non-PKP */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
             <div className="flex items-center gap-2">
-              <PieChart size={16} className="text-amber-500" />
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Tax Classification & VAT Distribution</h3>
+              <PieChart size={16} className="text-[#578ef5]" />
+              <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Tax Classification & VAT Distribution</h3>
             </div>
-            <span className="text-xs font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs font-mono font-bold bg-[#578ef5]/10 text-[#578ef5] border border-[#578ef5]/20 px-2.5 py-0.5 rounded-full">
               {pkpPct}% PKP
             </span>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-1">
-            {/* Lingkaran Donut Chart */}
             <div className="relative w-32 h-36 shrink-0 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                 <path
-                  className="text-slate-100"
+                  className="text-stone-100"
                   strokeWidth="3.8"
                   stroke="currentColor"
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-amber-500 transition-all duration-500"
+                  className="text-[#578ef5] transition-all duration-500"
                   strokeDasharray={`${pkpPct}, 100`}
                   strokeWidth="3.8"
                   strokeLinecap="round"
@@ -463,36 +431,35 @@ export default function AccountingReportsPage() {
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-xl font-bold font-mono text-slate-900">{pkpPct}%</span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase">VAT PKP</span>
+                <span className="text-xl font-bold font-mono text-stone-900">{pkpPct}%</span>
+                <span className="text-[10px] text-stone-400 font-medium uppercase">VAT PKP</span>
               </div>
             </div>
 
-            {/* Rincian Angka */}
             <div className="space-y-2.5 flex-1 w-full text-xs">
-              <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-1">
+              <div className="p-3 bg-[#578ef5]/10 border border-[#578ef5]/20 rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-bold text-amber-900">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
+                  <span className="flex items-center gap-1.5 font-bold text-[#578ef5]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#578ef5] inline-block" />
                     PKP Invoices (VAT 11%)
                   </span>
-                  <span className="font-mono font-bold text-amber-900">{pkpInvoices.length} inv</span>
+                  <span className="font-mono font-bold text-[#578ef5]">{pkpInvoices.length} inv</span>
                 </div>
-                <div className="flex justify-between font-mono text-[11px] text-amber-800">
+                <div className="flex justify-between font-mono text-[11px] text-stone-700">
                   <span>Gross Value:</span>
                   <span>{formatRupiah(pkpRevenue)}</span>
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block" />
+                  <span className="flex items-center gap-1.5 font-bold text-stone-700">
+                    <span className="w-2.5 h-2.5 rounded-full bg-stone-300 inline-block" />
                     Non-PKP Invoices
                   </span>
-                  <span className="font-mono font-bold text-slate-700">{nonPkpInvoices.length} inv</span>
+                  <span className="font-mono font-bold text-stone-700">{nonPkpInvoices.length} inv</span>
                 </div>
-                <div className="flex justify-between font-mono text-[11px] text-slate-500">
+                <div className="flex justify-between font-mono text-[11px] text-stone-500">
                   <span>Gross Value:</span>
                   <span>{formatRupiah(nonPkpRevenue)}</span>
                 </div>
@@ -501,12 +468,11 @@ export default function AccountingReportsPage() {
           </div>
         </div>
 
-        {/* Diagram Lingkaran Realisasi Pencetakan / Unduh */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
             <div className="flex items-center gap-2">
               <PieChart size={16} className="text-emerald-500" />
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Print & Fulfillment Realization</h3>
+              <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Print & Fulfillment Realization</h3>
             </div>
             <span className="text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full">
               {realizationRate}% Done
@@ -514,11 +480,10 @@ export default function AccountingReportsPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-1">
-            {/* Lingkaran Donut Chart */}
             <div className="relative w-32 h-36 shrink-0 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                 <path
-                  className="text-slate-100"
+                  className="text-stone-100"
                   strokeWidth="3.8"
                   stroke="currentColor"
                   fill="none"
@@ -536,12 +501,11 @@ export default function AccountingReportsPage() {
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-xl font-bold font-mono text-slate-900">{realizationRate}%</span>
-                <span className="text-[10px] text-slate-400 font-medium uppercase">Printed</span>
+                <span className="text-xl font-bold font-mono text-stone-900">{realizationRate}%</span>
+                <span className="text-[10px] text-stone-400 font-medium uppercase">Printed</span>
               </div>
             </div>
 
-            {/* Rincian Angka */}
             <div className="space-y-2.5 flex-1 w-full text-xs">
               <div className="p-3 bg-emerald-50/60 border border-emerald-200/80 rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
@@ -553,13 +517,13 @@ export default function AccountingReportsPage() {
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block" />
+                  <span className="flex items-center gap-1.5 font-bold text-stone-700">
+                    <span className="w-2.5 h-2.5 rounded-full bg-stone-300 inline-block" />
                     Pending Download
                   </span>
-                  <span className="font-mono font-bold text-slate-700">{totalInvoicesCount - processedCount} inv</span>
+                  <span className="font-mono font-bold text-stone-700">{totalInvoicesCount - processedCount} inv</span>
                 </div>
               </div>
             </div>

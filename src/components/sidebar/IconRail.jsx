@@ -21,17 +21,17 @@ export default function IconRail() {
     <div className="w-16 bg-[#0f172a] text-slate-400 flex flex-col items-center justify-between py-4 border-r border-slate-800 shrink-0 select-none">
       {/* Brand Icon Mini */}
       <div className="flex flex-col items-center gap-5">
-        <Link href="/" className="w-10 h-10 relative flex items-center justify-center rounded-lg hover:opacity-90 transition-opacity">
-          <Image 
-            src="/logo-wellen.png" 
+        <Link href="/" title="Wellen Home" className="w-10 h-10 relative flex items-center justify-center rounded-lg hover:opacity-90 transition-opacity overflow-hidden">
+          <Image
+            src="/logo-wellen.png"
             alt="Wellen Logo"
-            width={30} 
-            height={30} 
+            width={30}
+            height={30}
             className="object-contain"
           />
         </Link>
 
-        {/* Top Icons - Urutan Berurutan Sesuai Menu Workspace */}
+        {/* Top Icons */}
         <div className="flex flex-col items-center gap-2.5">
           {/* 1. Home Dashboard */}
           <Link
@@ -39,7 +39,7 @@ export default function IconRail() {
             title="Dashboard"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
@@ -52,7 +52,7 @@ export default function IconRail() {
             title="Import WPP (Excel & PO)"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/import' || pathname === '/create-invoice'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
@@ -65,7 +65,7 @@ export default function IconRail() {
             title="Approval Queue"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/approval'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
@@ -78,7 +78,7 @@ export default function IconRail() {
             title="Invoice List"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/invoices'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
@@ -91,7 +91,7 @@ export default function IconRail() {
             title="Accounting Reports & e-Faktur"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/accounting-reports' || pathname === '/efaktur-export'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
@@ -104,7 +104,7 @@ export default function IconRail() {
             title="Approved Invoices"
             className={`p-2.5 rounded-xl transition-all ${
               pathname === '/approved-invoices'
-                ? 'bg-[#c2410c]/20 text-[#ea580c] border border-[#ea580c]/30 shadow-2xs'
+                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
