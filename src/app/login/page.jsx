@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,28 +19,45 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg(null);
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      // Set timeout 8 detik agar tombol tidak gantung/macet di 'PROCESSING...'
+      const authPromise = supabase.auth.signInWithPassword({
+        email: cleanEmail,
         password: password,
       });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Koneksi ke server timeout. Silakan periksa jaringan Anda atau coba lagi.')),
+          8000
+        )
+      );
+
+      const res = await Promise.race([authPromise, timeoutPromise]);
+      const { data, error } = res || {};
 
       if (error) {
         setErrorMsg(
           error.message === 'Invalid login credentials'
-            ? 'Invalid email or password. Please check your credentials.'
+            ? 'Email atau password salah. Silakan periksa kembali kredensial Anda.'
             : error.message
         );
+        setLoading(false);
         return;
       }
 
       if (data?.session) {
+        router.push('/invoices');
         window.location.href = '/invoices';
         return;
       }
+
+      setErrorMsg('Gagal memulai sesi login. Silakan coba lagi.');
     } catch (err) {
-      console.error('Unexpected Login Error:', err);
-      setErrorMsg('Failed to connect to authentication server.');
+      console.error('Login error:', err);
+      setErrorMsg(err.message || 'Gagal terhubung ke server autentikasi.');
     } finally {
       setLoading(false);
     }
@@ -110,12 +128,12 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 pr-10 text-xs text-stone-800 placeholder-stone-400 outline-none transition focus:border-[#578ef5] focus:ring-1 focus:ring-[#578ef5]"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-10 text-xs text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#578ef5] focus:ring-1 focus:ring-[#578ef5]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 transition hover:text-stone-600 focus:outline-none"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 transition hover:text-stone-600 focus:outline-none cursor-pointer"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
