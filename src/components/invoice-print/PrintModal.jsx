@@ -9,17 +9,25 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
   if (!isOpen || !invoice) return null;
 
   const handlePrint = () => {
-    const originalTitle = document.title;
-    const sanitizedTitle = (invoice.invoice_number || 'Invoice')
-      .replace(/[\/\\?%*:|"<>]/g, '-');
-    document.title = sanitizedTitle;
+    try {
+      const originalTitle = document.title;
+      const sanitizedTitle = (invoice.invoice_number || 'Invoice')
+        .replace(/[\/\\?%*:|"<>]/g, '-');
+      document.title = sanitizedTitle;
 
-    onPrintConfirmed(invoice.id);
-    window.print();
+      if (typeof onPrintConfirmed === 'function') {
+        onPrintConfirmed(invoice.id);
+      }
 
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 1000);
+      window.print();
+
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 1000);
+    } catch (e) {
+      console.error('Failed to trigger print:', e);
+      window.print();
+    }
   };
 
   return (
@@ -66,7 +74,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
       `}</style>
 
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-4 border border-slate-200/90 print:border-none print:shadow-none print:my-0 animate-in zoom-in-95 duration-150">
-        {/* Header Action Bar - Sleek Corporate Style */}
+        {/* Header Action Bar */}
         <div className="sticky top-0 z-20 p-3.5 px-5 bg-slate-900 border-b border-slate-800 text-white flex items-center justify-between shadow-md print:hidden">
           <div className="text-xs font-medium flex items-center gap-2.5">
             <span className="text-slate-400">Document Preview:</span>
@@ -76,13 +84,15 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-950 font-semibold px-4 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold px-4 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
             >
               <Printer size={14} />
               Print / Save PDF
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -93,7 +103,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
 
         {/* Kertas Invoice Fisik */}
         <div id="print-area" className="p-8 text-black bg-white text-xs flex flex-col justify-between min-h-[273mm] box-border">
-          {/* Bagian Atas: Kop + Klien + Tabel Rincian */}
           <div className="space-y-4">
             {/* Header Kop Faktur */}
             <div className="flex justify-between items-start border-b border-stone-400 pb-3">
@@ -137,6 +146,40 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             {/* Tabel Rincian Barang */}
             {(() => {
               const isPoSource = invoice.importSource === 'po' || invoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
+              const showTaxBreakdown = invoice.show_tax_breakdown_in_print === true;
+
+              if (showTaxBreakdown) {
+                return (
+                  <table className="w-full text-left border-collapse border border-stone-400 text-xs">
+                    <thead className="bg-stone-200 border-b border-stone-400 font-bold text-[10px]">
+                      <tr>
+                        <th className="py-2 px-2 border-r border-stone-400 w-8 text-center">No</th>
+                        <th className="py-2 px-2 border-r border-stone-400">ITEM DESCRIPTION</th>
+                        <th className="py-2 px-2 text-right border-r border-stone-400">TOTAL PRICE</th>
+                        <th className="py-2 px-2 text-right border-r border-stone-400">DPP</th>
+                        <th className="py-2 px-2 text-right border-r border-stone-400">NILAI BARANG</th>
+                        <th className="py-2 px-2 text-right border-r border-stone-400">JASA CETAK</th>
+                        <th className="py-2 px-2 text-right border-r border-stone-400">WHT</th>
+                        <th className="py-2 px-2 text-right">PPN</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-300 font-medium text-[11px]">
+                      {invoice.items?.map((it, idx) => (
+                        <tr key={it.id || idx}>
+                          <td className="py-1.5 px-2 text-center border-r border-stone-300">{idx + 1}</td>
+                          <td className="py-1.5 px-2 border-r border-stone-300 font-bold">{it.item_description || it.store_name}</td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300 font-bold">{formatRupiah(it.total_price || it.total_faktur)}</td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.dpp)}</td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.nilai_barang)}</td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.jasa_cetak)}</td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-stone-300">{formatRupiah(it.pph23)}</td>
+                          <td className="py-1.5 px-2 text-right font-mono font-bold">{formatRupiah(it.ppn)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              }
 
               return (
                 <table className="w-full text-left border-collapse border border-stone-400 text-xs">
@@ -228,11 +271,9 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             })()}
           </div>
 
-          {/* Bagian Bawah: Diturunkan Otomatis (mt-auto) ke Batas Bawah Kertas */}
+          {/* Footer Kertas Invoice */}
           <div className="mt-auto pt-6 space-y-4">
-            {/* Sisi Bawah Paralel: File Name di Kiri & Total di Kanan */}
             <div className="grid grid-cols-2 gap-5 items-start">
-              {/* Kiri: File Name */}
               <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-300 h-full flex flex-col justify-between">
                 <div>
                   <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-1">
@@ -245,7 +286,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
                 </div>
               </div>
 
-              {/* Kanan: Ringkasan Total & Pajak */}
               <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-300 space-y-1.5 text-xs font-medium">
                 <div className="flex justify-between text-black font-semibold">
                   <span>TOTAL:</span>
@@ -286,9 +326,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
               </div>
             </div>
 
-            {/* Area Tengah Bawah: Payment Info & Stempel + Tanda Tangan PNG */}
             <div className="grid grid-cols-2 gap-5 items-end mb-3">
-              {/* Sisi Kiri: Payment Info */}
               <div className="space-y-1.5">
                 <span className="font-bold text-xs tracking-wider block text-black uppercase">
                   PAYMENT INFO
@@ -314,7 +352,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
                 </table>
               </div>
 
-              {/* Sisi Kanan: Authorized Sign & Stempel + Tanda Tangan SVG */}
               <div className="flex flex-col items-center justify-end text-center relative h-28 pb-1">
                 {(() => {
                   const isApproved =
@@ -333,7 +370,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
 
                   return (
                     <>
-                      {/* 1. Stempel SVG */}
                       <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
                         <Image
                           src="/stempel.svg"
@@ -344,7 +380,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
                         />
                       </div>
 
-                      {/* 2. Tanda Tangan Digital Otomatis (Tanita.svg vs risca.svg) */}
                       <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
                         <Image
                           src={sigSrc}
@@ -363,7 +398,6 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
               </div>
             </div>
 
-            {/* Garis Hitam Pembatas & Note */}
             <div className="border-t border-black pt-2.5">
               <p className="font-bold text-black text-[10px] mb-1">
                 Note :

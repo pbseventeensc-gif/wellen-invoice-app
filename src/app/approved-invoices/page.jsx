@@ -644,15 +644,6 @@ export default function ApprovedInvoicesPage() {
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-                title="Halaman Berikutnya"
-              >
-                <ChevronRight size={15} />
-              </button>
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(totalPages)}
                 className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
                 title="Halaman Terakhir"
@@ -724,6 +715,25 @@ export default function ApprovedInvoicesPage() {
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
           invoice={selectedInvoice}
+          onPrintConfirmed={(id) => {
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const timestampStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+            const updated = invoices.map((inv) => {
+              if (inv.id === id || inv.invoice_number === id) {
+                return {
+                  ...inv,
+                  time_download: inv.time_download || timestampStr,
+                };
+              }
+              return inv;
+            });
+
+            setInvoices(updated);
+            localStorage.setItem('wellen_invoices', JSON.stringify(updated));
+            window.dispatchEvent(new Event('storage'));
+          }}
         />
       )}
     </div>

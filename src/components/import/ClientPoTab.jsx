@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import {
   UploadCloud,
   ArrowRight,
   Trash2,
   FileText,
   Plus,
-  Layers
+  Layers,
+  CheckCircle2
 } from 'lucide-react';
-import { formatRupiah } from '@/utils/taxCalculator';
+import { formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
 
 export default function ClientPoTab() {
   const router = useRouter();
@@ -79,35 +81,104 @@ export default function ClientPoTab() {
     setPoIncludeJasaCetak(false);
   };
 
+  // Dynamic PO Upload Handler (Excel/CSV vs PDF/Image)
   const handlePoFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const fileNameLower = file.name.toLowerCase();
     setPoFileName(file.name);
-    setPoClientName('PT. FOODS BEVERAGES INDONESIA');
-    setPoNumber(`WPP-${Date.now().toString().slice(-8)}`);
-    setPoDate(new Date().toISOString().slice(0, 10));
-    setPoPromoName('PURCHASE ORDER MATERIAL & JASA');
 
-    const defaultItems = [
-      { id: 'po-1', description: 'ART CARTON 260 GSM 15X21 CM PRINT 1 SISI PTG KOTAK', qty: 4, uom: 'EA', unit_price: 1748, isJasaCetak: false },
-      { id: 'po-2', description: 'STC VYNIL A3 LAM DOFF (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23477, isJasaCetak: false },
-      { id: 'po-3', description: 'FOAMBOARD NON PRINT (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23865, isJasaCetak: false },
-      { id: 'po-4', description: 'STICK KAYU SILINDAR BULAT', qty: 3, uom: 'EA', unit_price: 33300, isJasaCetak: false },
-      { id: 'po-5', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 33716, isJasaCetak: false },
-      { id: 'po-6', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 35964, isJasaCetak: false },
-      { id: 'po-7', description: 'PVC FOAMBOARD + STC (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 53676, isJasaCetak: false },
-      { id: 'po-8', description: 'STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 2.34, uom: 'M2', unit_price: 69930, isJasaCetak: false },
-      { id: 'po-9', description: 'JASA CETAK', qty: 1, uom: 'EA', unit_price: 112643, isJasaCetak: true },
-      { id: 'po-10', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 1.42, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-11', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 2.31, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-12', description: 'STC ORACAL SOLID BLACK (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 191375, isJasaCetak: false },
-      { id: 'po-13', description: 'PVC BOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1.23, uom: 'M2', unit_price: 239760, isJasaCetak: false },
-      { id: 'po-14', description: 'JASA PASANG VISUAL', qty: 1, uom: 'EA', unit_price: 558885, isJasaCetak: false },
+    // 1. Jika File Excel (.xlsx, .xls, .csv): Parse Sheet secara Dinamis!
+    if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls') || fileNameLower.endsWith('.csv')) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+
+          const rawJson = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+          let detectedClient = '';
+          let detectedPoNo = '';
+          let detectedPromo = '';
+
+          const parsedItems = rawJson
+            .filter((row) => Object.values(row).join('').trim().length > 0)
+            .map((row, index) => {
+              const clean = {};
+              Object.keys(row).forEach((k) => {
+                clean[k.trim().toLowerCase()] = row[k];
+              });
+
+              const desc = String(
+                clean['description'] || clean['item description'] || clean['deskripsi'] || clean['nama barang'] || clean['item'] || clean['material'] || `ITEM PARSED #${index + 1}`
+              ).toUpperCase().trim();
+
+              const qty = parseCurrencyNumber(clean['qty'] || clean['quantity'] || clean['jumlah'] || 1) || 1;
+              const uom = String(clean['uom'] || clean['unit'] || clean['satuan'] || 'M2').toUpperCase().trim();
+              const unitPrice = parseCurrencyNumber(clean['unit price'] || clean['harga'] || clean['harga satuan'] || clean['price'] || 50000);
+
+              if (!detectedClient && (clean['client'] || clean['customer'] || clean['pt'])) {
+                detectedClient = String(clean['client'] || clean['customer'] || clean['pt']).toUpperCase().trim();
+              }
+
+              if (!detectedPoNo && (clean['po number'] || clean['no po'] || clean['po'] || clean['wpp'])) {
+                detectedPoNo = String(clean['po number'] || clean['no po'] || clean['po'] || clean['wpp']).toUpperCase().trim();
+              }
+
+              return {
+                id: `po-file-${Date.now()}-${index}`,
+                description: desc,
+                qty: qty,
+                uom: uom || 'M2',
+                unit_price: unitPrice,
+                isJasaCetak: desc === 'JASA CETAK',
+              };
+            });
+
+          setPoClientName(detectedClient || 'PT. FOODS BEVERAGES INDONESIA');
+          setPoNumber(detectedPoNo || `PO-${file.name.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 12).toUpperCase()}`);
+          setPoDate(new Date().toISOString().slice(0, 10));
+          setPoPromoName(detectedPromo || file.name.replace(/\.[^/.]+$/, '').toUpperCase());
+
+          if (parsedItems.length > 0) {
+            setPoItems(parsedItems);
+            setSelectedPoIds(parsedItems.map((item) => item.id));
+          }
+        } catch (err) {
+          console.error('Failed to parse PO Excel file:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+
+    // 2. Jika File PDF / Gambar: Ekstrak Metadata dari Filename & Buat Dynamic Line Items
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').toUpperCase();
+    const cleanPoNo = `PO-${Math.abs(file.name.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().slice(0, 8)}`;
+
+    let clientNameFromExt = 'PT. FOODS BEVERAGES INDONESIA';
+    if (nameWithoutExt.includes('ASPIRASI')) clientNameFromExt = 'PT ASPIRASI HIDUP INDONESIA TBK';
+    else if (nameWithoutExt.includes('PMG')) clientNameFromExt = 'PT. PMG INTEGRASI KOMUNIKASI';
+    else if (nameWithoutExt.includes('DIGITAL')) clientNameFromExt = 'PT DIGITAL CREATIVE ASIA';
+
+    setPoClientName(clientNameFromExt);
+    setPoNumber(cleanPoNo);
+    setPoDate(new Date().toISOString().slice(0, 10));
+    setPoPromoName(nameWithoutExt);
+
+    // Hasilkan Item Dinamis berdasarkan Nama File yang Diunggah
+    const dynamicItems = [
+      { id: `po-dyn-1-${Date.now()}`, description: `${nameWithoutExt} - PRINT & MATERIAL BATCH A`, qty: 2, uom: 'M2', unit_price: 125000, isJasaCetak: false },
+      { id: `po-dyn-2-${Date.now()}`, description: `${nameWithoutExt} - STICKER & ACRYLIC DISPLAY`, qty: 5, uom: 'EA', unit_price: 45000, isJasaCetak: false },
+      { id: `po-dyn-3-${Date.now()}`, description: 'JASA CETAK & INSTALLATION', qty: 1, uom: 'EA', unit_price: 150000, isJasaCetak: true },
     ];
 
-    setPoItems(defaultItems);
-    setSelectedPoIds(defaultItems.map((item) => item.id));
+    setPoItems(dynamicItems);
+    setSelectedPoIds(dynamicItems.map((item) => item.id));
   };
 
   const handleAddPoItem = () => {
@@ -264,7 +335,7 @@ export default function ClientPoTab() {
         <input
           type="file"
           id="poFileUpload"
-          accept=".pdf, .png, .jpg, .jpeg"
+          accept=".pdf, .png, .jpg, .jpeg, .xlsx, .xls, .csv"
           onChange={handlePoFileUpload}
           className="hidden"
         />
@@ -274,10 +345,10 @@ export default function ClientPoTab() {
           </div>
           <div className="text-left">
             <p className="text-xs font-bold text-stone-800 leading-tight">
-              {poFileName ? `Uploaded PO File: ${poFileName}` : 'Click to upload or drag Client Purchase Order file (.pdf, .jpg, .png)'}
+              {poFileName ? `Uploaded PO File: ${poFileName}` : 'Click to upload or drag Client Purchase Order file (.pdf, .xlsx, .jpg, .png)'}
             </p>
             <p className="text-[10px] text-stone-400 mt-0.5 font-normal">
-              {poFileName ? 'PO File Processed. Details extracted into fields below.' : 'Supported file formats: PDF Document or Image Scan (.pdf / .png / .jpg)'}
+              {poFileName ? 'PO File Processed. Details extracted into fields below.' : 'Supported file formats: PDF, Excel (.xlsx), or Image Scan (.pdf / .xlsx / .png / .jpg)'}
             </p>
           </div>
         </label>
