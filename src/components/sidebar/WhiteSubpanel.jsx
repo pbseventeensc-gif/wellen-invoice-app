@@ -15,6 +15,7 @@ import {
   BarChart3, 
   ArrowUpRight,
   CheckCircle2,
+  AlertCircle,
   LogOut
 } from 'lucide-react';
 
@@ -23,6 +24,7 @@ export default function WhiteSubpanel() {
   const router = useRouter();
   const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
   const [profile, setProfile] = useState({
     name: 'FAHADA',
     role: 'AR Created',
@@ -63,11 +65,29 @@ export default function WhiteSubpanel() {
     }
   };
 
+  const updateRejectedCount = () => {
+    try {
+      const stored = localStorage.getItem('wellen_rejected_invoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setPendingRejectedCount(parsed.length);
+        }
+      } else {
+        setPendingRejectedCount(0);
+      }
+    } catch (e) {
+      setPendingRejectedCount(0);
+    }
+  };
+
   useEffect(() => {
     updateApprovedCount();
     updateApprovalCount();
+    updateRejectedCount();
     window.addEventListener('storage', updateApprovedCount);
     window.addEventListener('storage', updateApprovalCount);
+    window.addEventListener('storage', updateRejectedCount);
 
     const loadProfile = async () => {
       try {
@@ -113,7 +133,11 @@ export default function WhiteSubpanel() {
 
     loadProfile();
 
-    return () => window.removeEventListener('storage', updateApprovedCount);
+    return () => {
+      window.removeEventListener('storage', updateApprovedCount);
+      window.removeEventListener('storage', updateApprovalCount);
+      window.removeEventListener('storage', updateRejectedCount);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -125,6 +149,7 @@ export default function WhiteSubpanel() {
     { label: 'Import WPP (Excel)', href: '/import', icon: FileSpreadsheet },
     { label: 'Create Invoice', href: '/create-invoice', icon: FileText },
     { label: 'Approval Queue', href: '/approval', icon: Clock },
+    { label: 'Status Approval', href: '/status-approval', icon: AlertCircle },
     { label: 'Invoice List', href: '/invoices', icon: FileCheck2 },
   ];
 
@@ -157,6 +182,7 @@ export default function WhiteSubpanel() {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
                 const isApprovalQueue = item.href === '/approval';
+                const isStatusApproval = item.href === '/status-approval';
                 return (
                   <Link
                     key={item.href}
@@ -168,12 +194,17 @@ export default function WhiteSubpanel() {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
+                      <Icon size={15} className={isActive ? 'text-[#578ef5]' : isStatusApproval ? 'text-rose-500' : 'text-stone-400'} />
                       <span>{item.label}</span>
                     </div>
                     {isApprovalQueue && pendingApprovalCount > 0 && (
                       <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
                         {pendingApprovalCount}
+                      </span>
+                    )}
+                    {isStatusApproval && pendingRejectedCount > 0 && (
+                      <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
+                        {pendingRejectedCount}
                       </span>
                     )}
                   </Link>

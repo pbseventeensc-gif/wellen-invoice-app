@@ -165,6 +165,19 @@ export default function ApprovalPage() {
     const targetInvoice = queue.find((q) => q.id === rejectTargetId);
 
     if (targetInvoice) {
+      const rejectedItem = {
+        ...targetInvoice,
+        status: 'rejected',
+        reject_reason: rejectReasonText || 'Needs revision',
+        time_rejected: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      };
+      try {
+        const existingRejected = JSON.parse(localStorage.getItem('wellen_rejected_invoices') || '[]');
+        localStorage.setItem('wellen_rejected_invoices', JSON.stringify([rejectedItem, ...existingRejected]));
+      } catch (e) {
+        console.error('Failed to save rejected invoice:', e);
+      }
+
       try {
         const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
         const rejectedFakturSet = new Set(
