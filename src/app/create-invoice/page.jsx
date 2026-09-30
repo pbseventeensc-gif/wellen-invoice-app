@@ -175,6 +175,7 @@ export default function CreateInvoicePage() {
   const totalPph23Overall = calculatedStoreRows.reduce((acc, row) => acc + row.pph23, 0);
   const totalDppNilaiLainBarangOverall = calculatedStoreRows.reduce((acc, row) => acc + row.dppNilaiLainBarang, 0);
   const totalDppNilaiLainJasaCetakOverall = calculatedStoreRows.reduce((acc, row) => acc + row.dppNilaiLainJasaCetak, 0);
+  const totalDppNilaiLainOverall = totalDppNilaiLainBarangOverall + totalDppNilaiLainJasaCetakOverall;
 
   const totalPoNetOverall = calculatedStoreRows.reduce((acc, row) => acc + row.effectiveTotalPrice, 0);
 
@@ -205,14 +206,14 @@ export default function CreateInvoicePage() {
       show_tax_breakdown_in_print: showTaxBreakdownInPrint,
       is_po_excl_vat_active: isPoExclVatActive,
       show_jasa_cetak_po: showJasaCetakPo,
-      total_faktur: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
-      total_harga_net: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
-      subtotal_net: importSource === 'po' ? totalPoNetOverall : totalDppOverall,
+      total_faktur: totalPoNetOverall,
+      total_harga_net: totalPoNetOverall,
+      subtotal_net: totalPoNetOverall,
       total_dpp: totalDppOverall,
-      total_dpp_lainnya: totalNilaiBarangOverall,
+      total_dpp_lainnya: totalDppNilaiLainOverall,
       total_jasa_cetak: importSource === 'po' ? totalJasaCetakPoOverall : totalJasaCetakOverall,
       total_pph23: importSource === 'po' ? 0 : totalPph23Overall,
-      dpp_lain: totalNilaiBarangOverall,
+      dpp_lain: totalDppNilaiLainOverall,
       ppn_amount: vatAmount,
       grand_total: grandTotal,
       time_created: new Date().toISOString().slice(0, 16).replace('T', ' '),
@@ -523,7 +524,7 @@ export default function CreateInvoicePage() {
                     TOTAL ({calculatedStoreRows.length} ITEMS):
                   </td>
                   <td className="py-3 px-3 text-right font-mono font-extrabold text-stone-900 whitespace-nowrap">
-                    {formatRupiah(importSource === 'po' ? totalPoNetOverall : totalDppOverall)}
+                    {formatRupiah(totalPoNetOverall)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono font-bold text-stone-800 whitespace-nowrap">
                     {formatRupiah(totalDppOverall)}
@@ -560,14 +561,14 @@ export default function CreateInvoicePage() {
           <div className="flex justify-between items-center text-stone-600 font-normal">
             <span>TOTAL:</span>
             <span className="font-mono font-bold text-stone-900">
-              {formatRupiah(importSource === 'po' ? totalPoNetOverall : totalDppOverall)}
+              {formatRupiah(totalPoNetOverall)}
             </span>
           </div>
 
           {isDppActive && (
             <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2 font-normal">
-              <span>TOTAL NILAI BARANG:</span>
-              <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalNilaiBarangOverall)}</span>
+              <span>DPP NILAI LAIN:</span>
+              <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppNilaiLainOverall)}</span>
             </div>
           )}
 

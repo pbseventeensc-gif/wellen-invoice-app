@@ -263,7 +263,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
 
                 {invoice.is_dpp_active && (
                   <div className="flex justify-between text-black font-semibold border-t border-stone-300 pt-1">
-                    <span>Other DPP:</span>
+                    <span>DPP Nilai Lain:</span>
                     <span className="font-mono text-black font-bold">{formatRupiah(invoice.dpp_lain || invoice.dppLain)}</span>
                   </div>
                 )}
