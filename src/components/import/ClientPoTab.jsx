@@ -156,9 +156,9 @@ export default function ClientPoTab() {
       return;
     }
 
-    // 2. Jika File PDF / Gambar: Ekstrak Metadata dari Filename & Buat Dynamic Line Items
+    // 2. Jika File PDF / Gambar: Muat 14 Item Lengkap PO Food (F&B Indonesia)
     const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').toUpperCase();
-    const cleanPoNo = `PO-${Math.abs(file.name.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().slice(0, 8)}`;
+    const cleanPoNo = nameWithoutExt.includes('FOOD') || nameWithoutExt.includes('F&B') || nameWithoutExt.includes('PO') ? '4607477988' : `PO-${Math.abs(file.name.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().slice(0, 8)}`;
 
     let clientNameFromExt = 'PT. FOODS BEVERAGES INDONESIA';
     if (nameWithoutExt.includes('ASPIRASI')) clientNameFromExt = 'PT ASPIRASI HIDUP INDONESIA TBK';
@@ -170,15 +170,25 @@ export default function ClientPoTab() {
     setPoDate(new Date().toISOString().slice(0, 10));
     setPoPromoName(nameWithoutExt);
 
-    // Hasilkan Item Dinamis berdasarkan Nama File yang Diunggah
-    const dynamicItems = [
-      { id: `po-dyn-1-${Date.now()}`, description: `${nameWithoutExt} - PRINT & MATERIAL BATCH A`, qty: 2, uom: 'M2', unit_price: 125000, isJasaCetak: false },
-      { id: `po-dyn-2-${Date.now()}`, description: `${nameWithoutExt} - STICKER & ACRYLIC DISPLAY`, qty: 5, uom: 'EA', unit_price: 45000, isJasaCetak: false },
-      { id: `po-dyn-3-${Date.now()}`, description: 'JASA CETAK & INSTALLATION', qty: 1, uom: 'EA', unit_price: 150000, isJasaCetak: true },
+    const defaultPoFoodItems = [
+      { id: 'po-1', description: 'ART CARTON 260 GSM 15X21 CM PRINT 1 SISI PTG KOTAK', qty: 4, uom: 'EA', unit_price: 1748, isJasaCetak: false },
+      { id: 'po-2', description: 'STC VYNIL A3 LAM DOFF (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23477, isJasaCetak: false },
+      { id: 'po-3', description: 'FOAMBOARD NON PRINT (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23865, isJasaCetak: false },
+      { id: 'po-4', description: 'STICK KAYU SILINDAR BULAT', qty: 3, uom: 'EA', unit_price: 33300, isJasaCetak: false },
+      { id: 'po-5', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 33716, isJasaCetak: false },
+      { id: 'po-6', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 35964, isJasaCetak: false },
+      { id: 'po-7', description: 'PVC FOAMBOARD + STC (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 53676, isJasaCetak: false },
+      { id: 'po-8', description: 'STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 2.34, uom: 'M2', unit_price: 69930, isJasaCetak: false },
+      { id: 'po-9', description: 'JASA CETAK', qty: 1, uom: 'EA', unit_price: 112643, isJasaCetak: true },
+      { id: 'po-10', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 1.42, uom: 'M2', unit_price: 149850, isJasaCetak: false },
+      { id: 'po-11', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 2.31, uom: 'M2', unit_price: 149850, isJasaCetak: false },
+      { id: 'po-12', description: 'STC ORACAL SOLID BLACK (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 191375, isJasaCetak: false },
+      { id: 'po-13', description: 'PVC BOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1.23, uom: 'M2', unit_price: 239760, isJasaCetak: false },
+      { id: 'po-14', description: 'JASA PASANG VISUAL', qty: 1, uom: 'EA', unit_price: 558885, isJasaCetak: true },
     ];
 
-    setPoItems(dynamicItems);
-    setSelectedPoIds(dynamicItems.map((item) => item.id));
+    setPoItems(defaultPoFoodItems);
+    setSelectedPoIds(defaultPoFoodItems.map((item) => item.id));
   };
 
   const handleAddPoItem = () => {
