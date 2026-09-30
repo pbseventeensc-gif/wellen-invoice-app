@@ -40,7 +40,34 @@ export default function StatusApprovalPage() {
   const loadTrackingItems = () => {
     try {
       const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const trackingRows = storedStaging.filter((it) => it.status === 'waiting_approval' || it.status === 'rejected');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+
+      // 1. Get rejected items from staging
+      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected');
+
+      // 2. Get waiting items from approval queue (flatten items)
+      const waitingRows = [];
+      approvalQueue.forEach((q) => {
+        const arName = q.ar_name || q.created_by || 'FAHADA';
+        q.items?.forEach((it) => {
+          waitingRows.push({
+            ...it,
+            status: 'waiting_approval',
+            client_name: q.client_name || it.client_name || 'PT ASPIRASI HIDUP INDONESIA TBK',
+            ar_name: arName,
+            wpp_number: it.wpp_number || it.no_faktur || q.invoice_number,
+            total_price: it.total_price || it.total_faktur || q.grand_total,
+          });
+        });
+      });
+
+      // Combine both, avoiding duplicate IDs if any
+      const map = new Map();
+      [...waitingRows, ...rejectedRows].forEach((row) => {
+        if (row.id) map.set(row.id, row);
+      });
+
+      const trackingRows = Array.from(map.values());
       setTrackingItems(trackingRows);
     } catch (e) {
       console.error('Failed to load tracking items:', e);
@@ -60,6 +87,14 @@ export default function StatusApprovalPage() {
         const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
         const updatedStaging = storedStaging.filter((it) => it.id !== id);
         localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
+
+        const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+        const updatedQueue = approvalQueue.map((q) => ({
+          ...q,
+          items: q.items?.filter((it) => it.id !== id),
+        })).filter((q) => q.items && q.items.length > 0);
+        localStorage.setItem('wellen_approval_queue', JSON.stringify(updatedQueue));
+
         loadTrackingItems();
         window.dispatchEvent(new Event('storage'));
       } catch (e) {
@@ -76,6 +111,8 @@ export default function StatusApprovalPage() {
           it.status === 'waiting_approval' || it.status === 'rejected' ? { ...it, status: 'draft', reject_reason: '' } : it
         );
         localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
+        localStorage.setItem('wellen_approval_queue', JSON.stringify([]));
+
         loadTrackingItems();
         window.dispatchEvent(new Event('storage'));
       } catch (e) {
@@ -451,7 +488,7 @@ export default function StatusApprovalPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="block font-semibold text-stone-600 mb-1">Quantity:</label>
                   <input
