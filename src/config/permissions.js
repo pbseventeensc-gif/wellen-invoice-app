@@ -3,25 +3,25 @@
 export const ROLE_PERMISSIONS = {
   // Super Admin / Admin (Full Access)
   'super admin': {
-    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/efaktur-export'],
+    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/efaktur-export', '/status-approval'],
     label: 'Super Admin',
   },
 
   // AR Created / AR Creator (Staff AR - Import, Invoice Draft, List)
   'ar created': {
-    allowedPages: ['/', '/import', '/create-invoice', '/invoices'],
+    allowedPages: ['/', '/import', '/create-invoice', '/invoices', '/status-approval'],
     label: 'AR Creator',
   },
 
   // Approval / Manager (Risca & Tanita - Full Access seperti Super Admin)
   'approval': {
-    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/efaktur-export'],
+    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/efaktur-export', '/status-approval'],
     label: 'Approval Manager',
   },
 
   // Accounting / Tax (Reports, e-Faktur Exporter, Approved Invoices)
   'accounting': {
-    allowedPages: ['/', '/approved-invoices', '/accounting-reports', '/efaktur-export', '/invoices'],
+    allowedPages: ['/', '/approved-invoices', '/accounting-reports', '/efaktur-export', '/invoices', '/status-approval'],
     label: 'Accounting & Tax',
   },
 };
