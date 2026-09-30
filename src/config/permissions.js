@@ -13,9 +13,9 @@ export const ROLE_PERMISSIONS = {
     label: 'AR Creator',
   },
 
-  // Approval / Manager (Risca & Tanita - Full Access seperti Super Admin)
+  // Approval / Manager (Risca & Tanita - Approval, Invoices, Reports)
   'approval': {
-    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/efaktur-export', '/status-approval'],
+    allowedPages: ['/', '/import', '/create-invoice', '/approval', '/invoices', '/approved-invoices', '/accounting-reports', '/status-approval'],
     label: 'Approval Manager',
   },
 

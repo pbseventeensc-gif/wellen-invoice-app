@@ -154,7 +154,8 @@ export default function WhiteSubpanel() {
 
   const visibleInvoiceMenus = allInvoiceMenus.filter((m) => isRouteAllowed(profile.role, m.href));
   const visibleReportMenus = allReportMenus.filter((m) => {
-    if (m.href === '/efaktur-export' && normalizeRole(profile.role) === 'ar created') {
+    const norm = normalizeRole(profile.role);
+    if (m.href === '/efaktur-export' && (norm === 'ar created' || norm === 'approval')) {
       return false;
     }
     return isRouteAllowed(profile.role, m.href);
