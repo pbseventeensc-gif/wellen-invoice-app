@@ -575,19 +575,31 @@ export default function ClientPoTab() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleProceedPOInvoice}
-            disabled={selectedPoIds.length === 0}
-            className={`inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-colors shrink-0 ${
-              selectedPoIds.length > 0
-                ? 'bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 cursor-pointer'
-                : 'bg-stone-200 text-stone-400 cursor-not-allowed'
-            }`}
-          >
-            <span>Process ({selectedPoIds.length})</span>
-            <ArrowRight size={15} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleClearPoForm}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0"
+              title="Cancel Import"
+            >
+              <Trash2 size={14} />
+              <span>Cancel Import</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleProceedPOInvoice}
+              disabled={selectedPoIds.length === 0}
+              className={`inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-colors shrink-0 ${
+                selectedPoIds.length > 0
+                  ? 'bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 cursor-pointer'
+                  : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+              }`}
+            >
+              <span>Process ({selectedPoIds.length})</span>
+              <ArrowRight size={15} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -386,6 +386,26 @@ export default function ImportExcelTab() {
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Cancel this Excel import and clear parsed rows?')) {
+                    setImportedRows([]);
+                    setSelectedIds([]);
+                    setFileName('');
+                    setDetectedClient('');
+                    setDetectedPromo('');
+                    setDuplicateCount(0);
+                    setSearchQuery('');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0"
+                title="Cancel Import"
+              >
+                <Trash2 size={13} />
+                <span>Cancel Import</span>
+              </button>
+
               <div className="relative flex-1 md:w-64">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
                 <input
