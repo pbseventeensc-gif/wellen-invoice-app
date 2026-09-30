@@ -67,15 +67,9 @@ export default function WhiteSubpanel() {
 
   const updateRejectedCount = () => {
     try {
-      const stored = localStorage.getItem('wellen_rejected_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setPendingRejectedCount(parsed.length);
-        }
-      } else {
-        setPendingRejectedCount(0);
-      }
+      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const rejectedCount = storedStaging.filter((it) => it.status === 'rejected').length;
+      setPendingRejectedCount(rejectedCount);
     } catch (e) {
       setPendingRejectedCount(0);
     }

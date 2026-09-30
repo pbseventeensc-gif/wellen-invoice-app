@@ -19,7 +19,6 @@ import {
 export default function IconRail() {
   const pathname = usePathname();
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
-  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
 
   useEffect(() => {
     const updateCount = () => {
@@ -31,17 +30,8 @@ export default function IconRail() {
         } else {
           setPendingApprovalCount(0);
         }
-
-        const storedRej = localStorage.getItem('wellen_rejected_invoices');
-        if (storedRej) {
-          const parsedRej = JSON.parse(storedRej);
-          if (Array.isArray(parsedRej)) setPendingRejectedCount(parsedRej.length);
-        } else {
-          setPendingRejectedCount(0);
-        }
       } catch (e) {
         setPendingApprovalCount(0);
-        setPendingRejectedCount(0);
       }
     };
     updateCount();
@@ -113,18 +103,13 @@ export default function IconRail() {
           <Link
             href="/status-approval"
             title="Status Approval (Rejected Invoices)"
-            className={`p-2.5 rounded-xl transition-all relative ${
+            className={`p-2.5 rounded-xl transition-all ${
               pathname === '/status-approval'
                 ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <AlertCircle size={20} className="text-rose-400" />
-            {pendingRejectedCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full font-mono">
-                {pendingRejectedCount}
-              </span>
-            )}
           </Link>
 
           {/* 5. Invoice List */}
