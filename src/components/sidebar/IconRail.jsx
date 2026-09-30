@@ -18,20 +18,16 @@ import {
 
 export default function IconRail() {
   const pathname = usePathname();
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
 
   useEffect(() => {
     const updateCount = () => {
       try {
-        const stored = localStorage.getItem('wellen_approval_queue');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) setPendingApprovalCount(parsed.length);
-        } else {
-          setPendingApprovalCount(0);
-        }
+        const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+        const rejectedCount = storedStaging.filter((it) => it.status === 'rejected' || it.status === 'waiting_approval').length;
+        setPendingRejectedCount(rejectedCount);
       } catch (e) {
-        setPendingApprovalCount(0);
+        setPendingRejectedCount(0);
       }
     };
     updateCount();
@@ -81,38 +77,25 @@ export default function IconRail() {
             <FileSpreadsheet size={20} />
           </Link>
 
-          {/* 3. Approval Queue */}
-          <Link
-            href="/approval"
-            title="Approval Queue"
-            className={`p-2.5 rounded-xl transition-all relative ${
-              pathname === '/approval'
-                ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
-                : 'hover:text-white hover:bg-slate-800/60'
-            }`}
-          >
-            <Clock size={20} />
-            {pendingApprovalCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full font-mono">
-                {pendingApprovalCount}
-              </span>
-            )}
-          </Link>
-
-          {/* 4. Status Approval (Rejected) */}
+          {/* 3. Status Approval */}
           <Link
             href="/status-approval"
-            title="Status Approval (Rejected Invoices)"
-            className={`p-2.5 rounded-xl transition-all ${
+            title="Status Approval"
+            className={`p-2.5 rounded-xl transition-all relative ${
               pathname === '/status-approval'
                 ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <AlertCircle size={20} className="text-rose-400" />
+            <Clock size={20} />
+            {pendingRejectedCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full font-mono">
+                {pendingRejectedCount}
+              </span>
+            )}
           </Link>
 
-          {/* 5. Invoice List */}
+          {/* 4. Invoice List */}
           <Link
             href="/invoices"
             title="Invoice List"
@@ -125,7 +108,7 @@ export default function IconRail() {
             <FileCheck2 size={20} />
           </Link>
 
-          {/* 6. Accounting Reports & e-Faktur */}
+          {/* 5. Accounting Reports & e-Faktur */}
           <Link
             href="/accounting-reports"
             title="Accounting Reports & e-Faktur"
@@ -138,7 +121,7 @@ export default function IconRail() {
             <BarChart3 size={20} />
           </Link>
 
-          {/* 7. Approved Invoices */}
+          {/* 6. Approved Invoices */}
           <Link
             href="/approved-invoices"
             title="Approved Invoices"
