@@ -33,6 +33,7 @@ export default function CreateInvoicePage() {
   // State Item Toko Murni
   const [stores, setStores] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isFahadaLocked, setIsFahadaLocked] = useState(false);
 
   // Auto detect AR Staff Name from Supabase User Email
   useEffect(() => {
@@ -41,8 +42,13 @@ export default function CreateInvoicePage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user?.email) {
           const email = user.email.toLowerCase();
-          if (email.includes('keyjia')) setCreatedByName('KEYJIA');
-          else if (email.includes('fahada')) setCreatedByName('FAHADA');
+          if (email.includes('keyjia')) {
+            setCreatedByName('KEYJIA');
+            setIsFahadaLocked(false);
+          } else if (email.includes('fahada')) {
+            setCreatedByName('FAHADA');
+            setIsFahadaLocked(true);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -308,11 +314,17 @@ export default function CreateInvoicePage() {
             <select
               value={createdByName}
               onChange={(e) => setCreatedByName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 cursor-pointer"
+              disabled={isFahadaLocked}
+              className={`w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 ${
+                isFahadaLocked ? 'opacity-80 bg-stone-100 cursor-not-allowed select-none' : 'cursor-pointer'
+              }`}
             >
               <option value="FAHADA">FAHADA (fahadahanifah@gmail.com)</option>
               <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
             </select>
+            {isFahadaLocked && (
+              <p className="text-[10px] text-stone-400 mt-1 italic">Locked (Logged in as FAHADA)</p>
+            )}
           </div>
         </div>
 

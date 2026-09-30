@@ -22,6 +22,7 @@ export default function WhiteSubpanel() {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [profile, setProfile] = useState({
     name: 'FAHADA',
     role: 'AR Created',
@@ -45,9 +46,28 @@ export default function WhiteSubpanel() {
     }
   };
 
+  const updateApprovalCount = () => {
+    try {
+      const stored = localStorage.getItem('wellen_approval_queue');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setPendingApprovalCount(parsed.length);
+        }
+      } else {
+        setPendingApprovalCount(0);
+      }
+    } catch (e) {
+      console.error(e);
+      setPendingApprovalCount(0);
+    }
+  };
+
   useEffect(() => {
     updateApprovedCount();
+    updateApprovalCount();
     window.addEventListener('storage', updateApprovedCount);
+    window.addEventListener('storage', updateApprovalCount);
 
     const loadProfile = async () => {
       try {
@@ -136,18 +156,26 @@ export default function WhiteSubpanel() {
               {visibleInvoiceMenus.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
+                const isApprovalQueue = item.href === '/approval';
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                       isActive
                         ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
                         : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                     }`}
                   >
-                    <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
+                      <span>{item.label}</span>
+                    </div>
+                    {isApprovalQueue && pendingApprovalCount > 0 && (
+                      <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
+                        {pendingApprovalCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

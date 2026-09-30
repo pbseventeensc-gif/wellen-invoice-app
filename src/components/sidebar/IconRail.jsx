@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -16,6 +17,26 @@ import {
 
 export default function IconRail() {
   const pathname = usePathname();
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+
+  useEffect(() => {
+    const updateCount = () => {
+      try {
+        const stored = localStorage.getItem('wellen_approval_queue');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setPendingApprovalCount(parsed.length);
+        } else {
+          setPendingApprovalCount(0);
+        }
+      } catch (e) {
+        setPendingApprovalCount(0);
+      }
+    };
+    updateCount();
+    window.addEventListener('storage', updateCount);
+    return () => window.removeEventListener('storage', updateCount);
+  }, []);
 
   return (
     <div className="w-16 bg-[#0f172a] text-slate-400 flex flex-col items-center justify-between py-4 border-r border-slate-800 shrink-0 select-none">
@@ -63,13 +84,18 @@ export default function IconRail() {
           <Link
             href="/approval"
             title="Approval Queue"
-            className={`p-2.5 rounded-xl transition-all ${
+            className={`p-2.5 rounded-xl transition-all relative ${
               pathname === '/approval'
                 ? 'bg-[#578ef5]/20 text-[#578ef5] border border-[#578ef5]/30 shadow-2xs'
                 : 'hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Clock size={20} />
+            {pendingApprovalCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full font-mono">
+                {pendingApprovalCount}
+              </span>
+            )}
           </Link>
 
           {/* 4. Invoice List */}
