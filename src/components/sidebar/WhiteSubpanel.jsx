@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { isRouteAllowed } from '@/config/permissions';
+import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import userAvatar from '@/assets/logo_userlogin.png';
 import { 
   FileSpreadsheet, 
@@ -153,7 +153,12 @@ export default function WhiteSubpanel() {
   ];
 
   const visibleInvoiceMenus = allInvoiceMenus.filter((m) => isRouteAllowed(profile.role, m.href));
-  const visibleReportMenus = allReportMenus.filter((m) => isRouteAllowed(profile.role, m.href));
+  const visibleReportMenus = allReportMenus.filter((m) => {
+    if (m.href === '/efaktur-export' && normalizeRole(profile.role) === 'ar created') {
+      return false;
+    }
+    return isRouteAllowed(profile.role, m.href);
+  });
   const showApprovedInvoices = isRouteAllowed(profile.role, '/approved-invoices');
 
   return (
