@@ -116,32 +116,32 @@ export default function ImportExcelTab() {
             const rawTotalFaktur = parseCurrencyNumber(rawTotalVal);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
 
-            const cleanFaktur = noFaktur.toLowerCase();
-            const cleanStore = storeName.toLowerCase();
+            const cleanFaktur = noFaktur.toLowerCase().trim();
+            const cleanStore = storeName.toLowerCase().trim();
 
-            const isAlreadyApproved = existingApproved.some((inv) =>
-              inv.invoice_number?.toLowerCase() === cleanFaktur ||
-              inv.items?.some(
-                (it) =>
-                  String(it.no_faktur || it.wpp_number || '').toLowerCase().includes(cleanFaktur) ||
-                  String(it.item_description || it.store_name || '').toLowerCase().includes(cleanStore)
-              )
-            );
+            const isAlreadyApproved = existingApproved.some((inv) => {
+              const invNum = (inv.invoice_number || '').toLowerCase().trim();
+              if (invNum && invNum === cleanFaktur) return true;
+              return inv.items?.some((it) => {
+                const itFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+                const itStore = (it.item_description || it.store_name || '').toLowerCase().trim();
+                return itFaktur === cleanFaktur || (itFaktur === cleanFaktur && itStore === cleanStore);
+              });
+            });
 
-            const isWaitingApproval = existingQueue.some((q) =>
-              q.invoice_number?.toLowerCase() === cleanFaktur ||
-              q.items?.some(
-                (it) =>
-                  String(it.no_faktur || it.wpp_number || '').toLowerCase().includes(cleanFaktur) ||
-                  String(it.item_description || it.store_name || '').toLowerCase().includes(cleanStore)
-              )
-            );
+            const isWaitingApproval = existingQueue.some((q) => {
+              const qNum = (q.invoice_number || '').toLowerCase().trim();
+              if (qNum && qNum === cleanFaktur) return true;
+              return q.items?.some((it) => {
+                const itFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+                return itFaktur === cleanFaktur;
+              });
+            });
 
-            const isDuplicateInStaging = existingStaging.some(
-              (w) =>
-                String(w.no_faktur || w.wpp_number || '').toLowerCase().includes(cleanFaktur) ||
-                String(w.store_name || w.item_description || '').toLowerCase().includes(cleanStore)
-            );
+            const isDuplicateInStaging = existingStaging.some((w) => {
+              const wFaktur = (w.no_faktur || w.wpp_number || '').toLowerCase().trim();
+              return wFaktur && wFaktur === cleanFaktur;
+            });
 
             let isDuplicate = false;
             let duplicateReason = '';
