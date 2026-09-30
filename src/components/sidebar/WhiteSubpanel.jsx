@@ -68,8 +68,12 @@ export default function WhiteSubpanel() {
   const updateRejectedCount = () => {
     try {
       const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+
+      const waitingCount = approvalQueue.reduce((acc, q) => acc + (q.items?.length || 0), 0) + storedStaging.filter((it) => it.status === 'waiting_approval').length;
       const rejectedCount = storedStaging.filter((it) => it.status === 'rejected').length;
-      setPendingRejectedCount(rejectedCount);
+
+      setPendingRejectedCount(waitingCount + rejectedCount);
     } catch (e) {
       setPendingRejectedCount(0);
     }
