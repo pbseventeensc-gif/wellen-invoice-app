@@ -72,7 +72,11 @@ export default function CreateInvoicePage() {
           if (parsed[0]?.client_name) setClientName(parsed[0].client_name);
           if (parsed[0]?.promo_name) setPromoName(parsed[0].promo_name);
           if (parsed[0]?.no_faktur || parsed[0]?.wpp_number) {
-            setWppNumber(parsed[0].no_faktur || parsed[0].wpp_number);
+            let fakturNo = String(parsed[0].no_faktur || parsed[0].wpp_number);
+            if (fakturNo.toUpperCase().includes('WPP')) {
+              fakturNo = fakturNo.replace(/WPP/gi, 'WPK');
+            }
+            setWppNumber(fakturNo);
           }
 
           const validStores = parsed.map((s, idx) => {
@@ -310,12 +314,12 @@ export default function CreateInvoicePage() {
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Document Identity</p>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">WPK Number (Editable)</label>
+            <label className="text-[11px] font-medium text-stone-500 block mb-1">WPK Number</label>
             <input
               type="text"
               value={wppNumber}
-              onChange={(e) => setWppNumber(e.target.value)}
-              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900"
+              disabled
+              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-800 cursor-not-allowed select-none"
             />
           </div>
           <div>
