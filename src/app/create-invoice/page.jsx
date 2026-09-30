@@ -249,6 +249,24 @@ export default function CreateInvoicePage() {
     const existingQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
     localStorage.setItem('wellen_approval_queue', JSON.stringify([payload, ...existingQueue]));
 
+    try {
+      const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const submittedIds = new Set(payload.items.map((it) => it.id));
+      const submittedFakturs = new Set(payload.items.map((it) => (it.no_faktur || it.wpp_number || '').toLowerCase().trim()));
+
+      const updatedStaging = existingStaging.map((item) => {
+        const itemId = item.id;
+        const itemFaktur = (item.no_faktur || item.wpp_number || '').toLowerCase().trim();
+        if (submittedIds.has(itemId) || submittedFakturs.has(itemFaktur)) {
+          return { ...item, status: 'waiting_approval' };
+        }
+        return item;
+      });
+      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
+    } catch (e) {
+      console.error('Failed to update staging status:', e);
+    }
+
     sessionStorage.removeItem('wellen_staged_items');
     window.dispatchEvent(new Event('storage'));
 

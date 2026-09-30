@@ -116,11 +116,25 @@ export default function InvoiceListPage() {
   const loadData = () => {
     try {
       const approvedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+
       const approvedItemIdsSet = new Set();
-      
+      const approvedFaktursSet = new Set();
       approvedInvoices.forEach((inv) => {
         inv.items?.forEach((it) => {
           if (it.id) approvedItemIdsSet.add(it.id);
+          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+          if (f) approvedFaktursSet.add(f);
+        });
+      });
+
+      const waitingItemIdsSet = new Set();
+      const waitingFaktursSet = new Set();
+      approvalQueue.forEach((q) => {
+        q.items?.forEach((it) => {
+          if (it.id) waitingItemIdsSet.add(it.id);
+          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+          if (f) waitingFaktursSet.add(f);
         });
       });
 
@@ -136,7 +150,14 @@ export default function InvoiceListPage() {
       }
 
       const activePendingItems = rawStaging.filter((it) => {
-        return it.status !== 'invoiced' && !approvedItemIdsSet.has(it.id);
+        const itemId = it.id;
+        const itemFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+
+        const isApproved = approvedItemIdsSet.has(itemId) || (itemFaktur && approvedFaktursSet.has(itemFaktur));
+        const isWaiting = waitingItemIdsSet.has(itemId) || (itemFaktur && waitingFaktursSet.has(itemFaktur)) || it.status === 'waiting_approval' || it.status === 'waiting';
+        const isInvoiced = it.status === 'invoiced';
+
+        return !isApproved && !isWaiting && !isInvoiced;
       });
 
       setItems(activePendingItems);
