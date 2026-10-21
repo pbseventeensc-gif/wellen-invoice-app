@@ -64,9 +64,22 @@ export default function WhiteSubpanel() {
     }
   });
 
-  const [profile, setProfile] = useState({
-    name: 'FAHADA',
-    role: 'AR Created',
+  const [profile, setProfile] = useState(() => {
+    if (typeof window === 'undefined') return { name: 'FAHADA', role: 'Super Admin' };
+    const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();
+    if (savedUser.includes('rizkha') || savedUser.includes('risca')) {
+      return { name: 'RISCA', role: 'Approval' };
+    }
+    if (savedUser.includes('tanita')) {
+      return { name: 'TANITA', role: 'Approval' };
+    }
+    if (savedUser.includes('keyjia')) {
+      return { name: 'KEYJIA', role: 'AR Created' };
+    }
+    if (savedUser.includes('fahada')) {
+      return { name: 'FAHADA', role: 'AR Created' };
+    }
+    return { name: 'Admin Testing', role: 'Super Admin' };
   });
 
   const updateApprovedCount = () => {

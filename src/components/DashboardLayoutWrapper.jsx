@@ -30,6 +30,17 @@ export default function DashboardLayoutWrapper({ children }) {
     let isMounted = true;
     const checkRole = async () => {
       try {
+        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
+        if (testingUser && isMounted) {
+          if (testingUser.includes('rizkha') || testingUser.includes('risca')) {
+            setUserRole('Approval');
+          } else if (testingUser.includes('keyjia') || testingUser.includes('fahada')) {
+            setUserRole('AR Creator');
+          } else {
+            setUserRole('Super Admin');
+          }
+        }
+
         const { data: { user } } = await supabase.auth.getUser();
         if (user && isMounted) {
           const { data } = await supabase
@@ -39,11 +50,11 @@ export default function DashboardLayoutWrapper({ children }) {
             .maybeSingle();
 
           if (isMounted) setUserRole(data?.role || 'Super Admin');
-        } else if (isMounted) {
+        } else if (isMounted && !testingUser) {
           setUserRole('Super Admin');
         }
       } catch (e) {
-        if (isMounted) setUserRole('Super Admin');
+        if (isMounted && !localStorage.getItem('wellen_testing_user')) setUserRole('Super Admin');
       } finally {
         if (isMounted) setLoadingRole(false);
       }

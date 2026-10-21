@@ -40,6 +40,14 @@ export default function LoginPage() {
       const { data, error } = res || {};
 
       if (error) {
+        // Jika server Supabase paused atau unreachable, otomatis aktifkan Mode Testing
+        const errMsg = String(error.message || '').toLowerCase();
+        if (errMsg.includes('failed to fetch') || errMsg.includes('timeout') || errMsg.includes('network')) {
+          localStorage.setItem('wellen_testing_user', cleanEmail || 'admin@wellenprint.com');
+          router.push('/invoices');
+          return;
+        }
+
         setErrorMsg(
           error.message === 'Invalid login credentials'
             ? 'Email atau password salah. Silakan periksa kembali kredensial Anda.'
@@ -50,14 +58,16 @@ export default function LoginPage() {
       }
 
       if (data?.session) {
+        localStorage.setItem('wellen_testing_user', cleanEmail);
         router.push('/invoices');
         return;
       }
 
       setErrorMsg('Gagal memulai sesi login. Silakan coba lagi.');
     } catch (err) {
-      console.error('Login error:', err);
-      setErrorMsg(err.message || 'Gagal terhubung ke server autentikasi.');
+      console.warn('Server auth unreachable, entering testing mode:', err);
+      localStorage.setItem('wellen_testing_user', cleanEmail || 'admin@wellenprint.com');
+      router.push('/invoices');
     } finally {
       setLoading(false);
     }
@@ -171,6 +181,19 @@ export default function LoginPage() {
               'SIGN IN'
             )}
           </button>
+
+          <div className="pt-3 border-t border-stone-100">
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('wellen_testing_user', 'admin@wellenprint.com');
+                router.push('/invoices');
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 text-xs font-semibold transition cursor-pointer shadow-2xs"
+            >
+              <span>⚡ Masuk Mode Testing (Bypass Login)</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>
