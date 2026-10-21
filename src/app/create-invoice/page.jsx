@@ -52,11 +52,24 @@ export default function CreateInvoicePage() {
             };
           });
 
+          let initialDate = '';
+          if (parsed[0]?.invoice_date) {
+            initialDate = parsed[0].invoice_date;
+          } else if (parsed[0]?.import_date) {
+            try {
+              const d = new Date(parsed[0].import_date);
+              if (!isNaN(d.getTime())) {
+                initialDate = d.toISOString().slice(0, 10);
+              }
+            } catch (e) {}
+          }
+
           return {
             isPo,
             clientName: parsed[0]?.client_name || '',
             promoName: parsed[0]?.promo_name || '',
             fakturNo,
+            invoiceDate: initialDate,
             stores: validStores,
           };
         }
@@ -71,7 +84,7 @@ export default function CreateInvoicePage() {
 
   // Form State
   const [wppNumber, setWppNumber] = useState(initialData?.fakturNo || '');
-  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [invoiceDate, setInvoiceDate] = useState(() => initialData?.invoiceDate || new Date().toISOString().slice(0, 10));
   const [createdByName, setCreatedByName] = useState('FAHADA');
   const [clientName, setClientName] = useState(initialData?.clientName || '');
   const [clientAddress, setClientAddress] = useState('');
@@ -207,10 +220,21 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    const cleanWpkNumber = (wppNumber || '').trim();
+    if (!cleanWpkNumber) {
+      alert('Please enter a valid WPK Number.');
+      return;
+    }
+
+    if (!invoiceDate) {
+      alert('Please select an Invoice Date.');
+      return;
+    }
+
     const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'sub';
     const payload = {
       id: `wpk-${uniqueId}`,
-      invoice_number: wppNumber,
+      invoice_number: cleanWpkNumber,
       invoice_date: invoiceDate,
       client_name: clientName,
       client_address: clientAddress,
@@ -236,8 +260,8 @@ export default function CreateInvoicePage() {
       importSource: importSource,
       items: calculatedStoreRows.map((it) => ({
         id: it.id,
-        no_faktur: it.no_faktur || wppNumber,
-        wpp_number: it.wpp_number || wppNumber,
+        no_faktur: cleanWpkNumber || it.no_faktur,
+        wpp_number: cleanWpkNumber || it.wpp_number,
         item_description: it.item_description || it.store_name,
         total_faktur: importSource === 'po' ? it.effectiveTotalPrice : it.effectiveTotalPrice || it.dpp,
         total_price: importSource === 'po' ? it.effectiveTotalPrice : it.effectiveTotalPrice || it.dpp,
@@ -261,7 +285,13 @@ export default function CreateInvoicePage() {
     try {
       const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
       const submittedIds = new Set(payload.items.map((it) => it.id));
-      const submittedFakturs = new Set(payload.items.map((it) => (it.no_faktur || it.wpp_number || '').toLowerCase().trim()));
+      const submittedFakturs = new Set([
+        cleanWpkNumber.toLowerCase(),
+        ...payload.items.map((it) => (it.no_faktur || it.wpp_number || '').toLowerCase().trim()),
+      ]);
+      if (initialData?.fakturNo) {
+        submittedFakturs.add(initialData.fakturNo.toLowerCase().trim());
+      }
 
       const updatedStaging = existingStaging.map((item) => {
         const itemId = item.id;
@@ -279,7 +309,7 @@ export default function CreateInvoicePage() {
     sessionStorage.removeItem('wellen_staged_items');
     window.dispatchEvent(new Event('storage'));
 
-    alert(`Invoice ${wppNumber} successfully submitted to Approval Queue!`);
+    alert(`Invoice ${cleanWpkNumber} successfully submitted to Approval Queue!`);
     router.push('/approval');
   };
 
@@ -320,14 +350,15 @@ export default function CreateInvoicePage() {
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
           <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Document Identity</p>
           <div>
-            <label htmlFor="wpk-number" className="text-[11px] font-semibold text-stone-600 block mb-1">WPK Number</label>
+            <label htmlFor="wpk-number" className="text-[11px] font-semibold text-stone-600 block mb-1">WPK Number (Editable)</label>
             <input
               id="wpk-number"
               name="wpkNumber"
               type="text"
               value={wppNumber}
-              disabled
-              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-800 cursor-not-allowed select-none"
+              onChange={(e) => setWppNumber(e.target.value)}
+              placeholder="e.g. WPK 0826-300006"
+              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800"
             />
           </div>
           <div>
@@ -338,7 +369,7 @@ export default function CreateInvoicePage() {
               type="date"
               value={invoiceDate}
               onChange={(e) => setInvoiceDate(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 font-mono"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 font-mono cursor-pointer"
             />
           </div>
           <div>

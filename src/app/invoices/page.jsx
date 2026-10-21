@@ -286,6 +286,7 @@ export default function InvoiceListPage() {
       qty: item.qty || 1,
       client_name: item.client_name,
       promo_name: item.promo_name || item.item_description,
+      invoice_date: item.invoice_date || item.import_date || item.date || '',
     }));
 
     const isPo = processableRows.some((item) => Boolean(item.uom && item.uom !== 'PCS') || item.isPoSource);
@@ -320,6 +321,7 @@ export default function InvoiceListPage() {
         uom: item.uom || 'PCS',
         client_name: item.client_name,
         promo_name: item.promo_name || item.item_description,
+        invoice_date: item.invoice_date || item.import_date || item.date || '',
       },
     ];
 
