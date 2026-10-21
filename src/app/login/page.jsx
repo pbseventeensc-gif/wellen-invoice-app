@@ -179,7 +179,7 @@ export default function LoginPage() {
             <span>Supabase Server: Online & Connected</span>
           </div>
 
-          <h1 className="mt-2 text-xl font-bold text-stone-900">Portal Invoicing & Approval</h1>
+          <h1 className="mt-2 text-xl font-bold text-stone-900">Invoicing & Approval</h1>
           <p className="text-xs text-stone-500 font-normal">
             Silakan masuk dengan akun masing-masing
           </p>
