@@ -50,6 +50,23 @@ export default function ApprovalPage() {
     const loadProfile = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
+        const activeEmail = (user?.email || testingUser || '').toLowerCase();
+
+        let defaultName = 'RISCA';
+        let defaultRole = 'Approval';
+
+        if (activeEmail.includes('tanita')) {
+          defaultName = 'TANITA';
+          defaultRole = 'Approval';
+        } else if (activeEmail.includes('fahada')) {
+          defaultName = 'FAHADA';
+          defaultRole = 'AR Created';
+        } else if (activeEmail.includes('keyjia')) {
+          defaultName = 'KEYJIA';
+          defaultRole = 'AR Created';
+        }
+
         if (user) {
           const { data } = await supabase
             .from('profiles')
@@ -57,12 +74,15 @@ export default function ApprovalPage() {
             .eq('id', user.id)
             .maybeSingle();
 
-          if (data) {
-            setProfile({
-              name: data.full_name || 'RISCA',
-              role: data.role || 'Approval',
-            });
-          }
+          setProfile({
+            name: data?.full_name || defaultName,
+            role: data?.role || defaultRole,
+          });
+        } else {
+          setProfile({
+            name: defaultName,
+            role: defaultRole,
+          });
         }
       } catch (err) {
         console.error('Failed to load profile for signature:', err);

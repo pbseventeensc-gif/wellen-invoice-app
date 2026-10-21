@@ -99,12 +99,14 @@ export default function CreateInvoicePage() {
     const loadArUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user?.email && isMounted) {
-          const email = user.email.toLowerCase();
-          if (email.includes('keyjia')) {
+        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
+        const activeEmail = (user?.email || testingUser || '').toLowerCase();
+
+        if (activeEmail && isMounted) {
+          if (activeEmail.includes('keyjia')) {
             setCreatedByName('KEYJIA');
             setIsFahadaLocked(false);
-          } else if (email.includes('fahada')) {
+          } else if (activeEmail.includes('fahada')) {
             setCreatedByName('FAHADA');
             setIsFahadaLocked(true);
           }

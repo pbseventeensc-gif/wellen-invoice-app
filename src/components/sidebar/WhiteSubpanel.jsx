@@ -199,38 +199,60 @@ export default function WhiteSubpanel() {
     const loadProfile = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();
+        const activeEmail = (user?.email || savedUser).toLowerCase();
+
+        let defaultName = 'Super Admin';
+        let defaultRole = 'Super Admin';
+
+        if (activeEmail.includes('keyjia')) {
+          defaultName = 'KEYJIA';
+          defaultRole = 'AR Created';
+        } else if (activeEmail.includes('fahada')) {
+          defaultName = 'FAHADA';
+          defaultRole = 'AR Created';
+        } else if (activeEmail.includes('rizkha') || activeEmail.includes('risca')) {
+          defaultName = 'RISCA';
+          defaultRole = 'Approval';
+        } else if (activeEmail.includes('tanita')) {
+          defaultName = 'TANITA';
+          defaultRole = 'Approval';
+        } else if (activeEmail.includes('admin')) {
+          defaultName = 'Super Admin';
+          defaultRole = 'Super Admin';
+        }
+
         if (user) {
-          const email = user.email?.toLowerCase() || '';
           const { data, error } = await supabase
             .from('profiles')
             .select('full_name, role')
             .eq('id', user.id)
             .maybeSingle();
 
-          let defaultName = 'FAHADA';
-          let defaultRole = 'AR Created';
-
-          if (email.includes('keyjia')) {
-            defaultName = 'KEYJIA';
-            defaultRole = 'AR Created';
-          } else if (email.includes('fahada')) {
-            defaultName = 'FAHADA';
-            defaultRole = 'AR Created';
-          } else if (email.includes('rizkha') || email.includes('risca')) {
-            defaultName = 'RISCA';
-            defaultRole = 'Approval';
-          } else if (email.includes('tanita')) {
-            defaultName = 'TANITA';
-            defaultRole = 'Approval';
-          }
-
           if (error) {
             console.error('Error fetching profile:', error.message);
           }
 
+          const finalName = data?.full_name || defaultName;
+          const finalRole = data?.role || defaultRole;
+
           setProfile({
-            name: data?.full_name || defaultName,
-            role: data?.role || defaultRole,
+            name: finalName,
+            role: finalRole,
+          });
+
+          // Otomatis sinkronkan profile ke tabel Supabase jika belum tersimpan
+          if (!data && user.id) {
+            await supabase.from('profiles').upsert({
+              id: user.id,
+              full_name: finalName,
+              role: finalRole,
+            }).catch(() => {});
+          }
+        } else {
+          setProfile({
+            name: defaultName,
+            role: defaultRole,
           });
         }
       } catch (err) {
@@ -249,6 +271,7 @@ export default function WhiteSubpanel() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('wellen_testing_user');
     router.push('/login');
     router.refresh();
   };

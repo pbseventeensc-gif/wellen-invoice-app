@@ -30,18 +30,19 @@ export default function DashboardLayoutWrapper({ children }) {
     let isMounted = true;
     const checkRole = async () => {
       try {
+        const { data: { user } } = await supabase.auth.getUser();
         const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
-        if (testingUser && isMounted) {
-          if (testingUser.includes('rizkha') || testingUser.includes('risca')) {
-            setUserRole('Approval');
-          } else if (testingUser.includes('keyjia') || testingUser.includes('fahada')) {
-            setUserRole('AR Creator');
-          } else {
-            setUserRole('Super Admin');
-          }
+        const activeEmail = (user?.email || testingUser || '').toLowerCase();
+
+        let assignedRole = 'Super Admin';
+        if (activeEmail.includes('rizkha') || activeEmail.includes('risca') || activeEmail.includes('tanita')) {
+          assignedRole = 'Approval';
+        } else if (activeEmail.includes('keyjia') || activeEmail.includes('fahada')) {
+          assignedRole = 'AR Creator';
+        } else {
+          assignedRole = 'Super Admin';
         }
 
-        const { data: { user } } = await supabase.auth.getUser();
         if (user && isMounted) {
           const { data } = await supabase
             .from('profiles')
@@ -49,12 +50,12 @@ export default function DashboardLayoutWrapper({ children }) {
             .eq('id', user.id)
             .maybeSingle();
 
-          if (isMounted) setUserRole(data?.role || 'Super Admin');
-        } else if (isMounted && !testingUser) {
-          setUserRole('Super Admin');
+          if (isMounted) setUserRole(data?.role || assignedRole);
+        } else if (isMounted) {
+          setUserRole(assignedRole);
         }
       } catch (e) {
-        if (isMounted && !localStorage.getItem('wellen_testing_user')) setUserRole('Super Admin');
+        if (isMounted) setUserRole('Super Admin');
       } finally {
         if (isMounted) setLoadingRole(false);
       }
