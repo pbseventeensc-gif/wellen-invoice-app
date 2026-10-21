@@ -22,7 +22,19 @@ function fmtShort(n) {
 }
 
 export default function AccountingReportsPage() {
-  const [invoices, setInvoices] = useState([]);
+  const [invoices, setInvoices] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('wellen_invoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {
+      console.error('Failed to load invoice data:', e);
+    }
+    return [];
+  });
   const [role, setRole] = useState('accounting');
   const [periodFilter, setPeriodFilter] = useState('month');
   const [startDate, setStartDate] = useState('2026-09-01');
@@ -44,7 +56,6 @@ export default function AccountingReportsPage() {
   };
 
   useEffect(() => {
-    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);
@@ -164,6 +175,9 @@ export default function AccountingReportsPage() {
         <div>
           <div className="relative inline-block">
             <select
+              id="report-role-filter"
+              name="reportRole"
+              aria-label="View as role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
               className="appearance-none bg-white border border-stone-300 text-stone-700 text-xs font-medium pl-3 pr-8 py-2 rounded-xl shadow-2xs focus:outline-none focus:border-[#578ef5] cursor-pointer"
@@ -241,17 +255,23 @@ export default function AccountingReportsPage() {
         <div className="p-4 px-5 border-b border-stone-200/80 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-stone-900">Revenue & Invoice Overview</span>
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-400 uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-stone-600 uppercase tracking-wider">
               <span>RANGE</span>
               <input
+                id="report-start-date"
+                name="startDate"
+                aria-label="Tanggal mulai"
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 onClick={(e) => e.target.showPicker?.()}
                 className="px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono text-stone-700 focus:outline-none focus:border-[#578ef5] cursor-pointer"
               />
-              <span className="text-stone-300">–</span>
+              <span className="text-stone-400">–</span>
               <input
+                id="report-end-date"
+                name="endDate"
+                aria-label="Tanggal akhir"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}

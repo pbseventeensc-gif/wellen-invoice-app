@@ -24,7 +24,45 @@ import PrintModal from '@/components/invoice-print/PrintModal';
 
 export default function StatusApprovalPage() {
   const router = useRouter();
-  const [trackingItems, setTrackingItems] = useState([]);
+  const getInitialTrackingItems = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+
+      // 1. Get rejected items from staging
+      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected');
+
+      // 2. Get waiting items from approval queue (flatten items)
+      const waitingRows = [];
+      approvalQueue.forEach((q) => {
+        const arName = q.ar_name || q.created_by || 'FAHADA';
+        q.items?.forEach((it) => {
+          waitingRows.push({
+            ...it,
+            status: 'waiting_approval',
+            client_name: q.client_name || it.client_name || 'PT ASPIRASI HIDUP INDONESIA TBK',
+            ar_name: arName,
+            wpp_number: it.wpp_number || it.no_faktur || q.invoice_number,
+            total_price: it.total_price || it.total_faktur || q.grand_total,
+          });
+        });
+      });
+
+      // Combine both, avoiding duplicate IDs if any
+      const map = new Map();
+      [...waitingRows, ...rejectedRows].forEach((row) => {
+        if (row.id) map.set(row.id, row);
+      });
+
+      return Array.from(map.values());
+    } catch (e) {
+      console.error('Failed to load tracking items:', e);
+      return [];
+    }
+  };
+
+  const [trackingItems, setTrackingItems] = useState(getInitialTrackingItems);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -76,7 +114,6 @@ export default function StatusApprovalPage() {
   };
 
   useEffect(() => {
-    loadTrackingItems();
     window.addEventListener('storage', loadTrackingItems);
     return () => window.removeEventListener('storage', loadTrackingItems);
   }, []);
@@ -217,7 +254,7 @@ export default function StatusApprovalPage() {
       {/* Summary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
+          <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block mb-1">
             WAITING APPROVAL
           </span>
           <p className="text-xl font-mono text-amber-600 font-bold">
@@ -226,7 +263,7 @@ export default function StatusApprovalPage() {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
+          <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block mb-1">
             REJECTED / REVISION
           </span>
           <p className="text-xl font-mono text-rose-600 font-bold">
@@ -235,7 +272,7 @@ export default function StatusApprovalPage() {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs">
-          <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
+          <span className="text-[10px] font-bold text-stone-600 uppercase tracking-wider block mb-1">
             TOTAL TRACKING
           </span>
           <p className="text-xl font-mono text-stone-900 font-bold">
@@ -250,6 +287,9 @@ export default function StatusApprovalPage() {
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
             <input
+              id="status-search"
+              name="statusSearch"
+              aria-label="Search invoice number, store, reason"
               type="text"
               placeholder="Search invoice number, store, reason..."
               value={searchTerm}
@@ -284,8 +324,11 @@ export default function StatusApprovalPage() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-          <span className="text-xs text-stone-500 font-normal">Rows per page:</span>
+          <label htmlFor="rows-per-page" className="text-xs text-stone-500 font-normal">Rows per page:</label>
           <select
+            id="rows-per-page"
+            name="rowsPerPage"
+            aria-label="Rows per page"
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value));
@@ -474,7 +517,7 @@ export default function StatusApprovalPage() {
               <div>
                 <label className="block font-semibold text-stone-600 mb-1">Rejection Reason / Notes:</label>
                 <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 font-medium italic">
-                  "{editingItem.reject_reason || 'Needs revision'}"
+                  &quot;{editingItem.reject_reason || 'Needs revision'}&quot;
                 </div>
               </div>
 

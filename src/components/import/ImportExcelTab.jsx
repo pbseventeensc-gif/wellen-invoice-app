@@ -469,7 +469,7 @@ export default function ImportExcelTab() {
                 {filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan={13} className="py-8 text-center text-stone-400 text-xs">
-                      No store data matching the keyword "{searchQuery}"
+                      No store data matching the keyword &quot;{searchQuery}&quot;
                     </td>
                   </tr>
                 ) : (

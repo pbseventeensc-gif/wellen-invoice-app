@@ -26,18 +26,16 @@ export default function ClientPoTab() {
   const [poItems, setPoItems] = useState([]);
 
   const [selectedPoIds, setSelectedPoIds] = useState([]);
-  const [remainingBatch, setRemainingBatch] = useState(null);
-
-  useEffect(() => {
+  const [remainingBatch, setRemainingBatch] = useState(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const storedRem = localStorage.getItem('wellen_po_remaining_items');
-      if (storedRem) {
-        setRemainingBatch(JSON.parse(storedRem));
-      }
+      return storedRem ? JSON.parse(storedRem) : null;
     } catch (e) {
       console.error(e);
+      return null;
     }
-  }, []);
+  });
 
   const handleLoadRemainingBatch = () => {
     if (!remainingBatch) return;
@@ -481,7 +479,7 @@ export default function ClientPoTab() {
               {poItems.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-stone-400 text-xs font-medium">
-                    No PO items entered yet. Click "+ Add Line Item Row" or upload a PO file above.
+                    No PO items entered yet. Click &quot;+ Add Line Item Row&quot; or upload a PO file above.
                   </td>
                 </tr>
               ) : (

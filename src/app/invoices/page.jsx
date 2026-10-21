@@ -24,9 +24,133 @@ import {
 } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
 
+const generate120MockItems = () => {
+  const now = new Date();
+  const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString();
+  const oneDayAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const todayStr = now.toISOString();
+
+  const mockList = [];
+  let counter = 1000;
+
+  for (let i = 0; i < 95; i++) {
+    counter++;
+    mockList.push({
+      id: `imp-${counter}`,
+      wpp_number: `WPP-2026-${counter}`,
+      no_faktur: `WPP-2026-${counter}`,
+      client_name: i % 3 === 0 ? 'PT ASPIRASI HIDUP INDONESIA TBK' : i % 3 === 1 ? 'PT. PMG INTEGRASI KOMUNIKASI' : 'PT DIGITAL CREATIVE ASIA',
+      item_description: `PRINT BANNER & POS MATERIAL BATCH #${i + 1}`,
+      total_price: 150000 + (i * 12500),
+      import_date: todayStr,
+      status: 'ready',
+      isDuplicate: false,
+    });
+  }
+
+  for (let i = 0; i < 13; i++) {
+    counter++;
+    mockList.push({
+      id: `imp-${counter}`,
+      wpp_number: `WPP-2026-${counter}`,
+      no_faktur: `WPP-2026-${counter}`,
+      client_name: 'PT FOODS BEVERAGES INDONESIA',
+      item_description: `STICKER VINYL & ACRYLIC DISPLAY #${i + 1}`,
+      total_price: 280000 + (i * 15000),
+      import_date: oneDayAgo,
+      status: 'waiting',
+      isDuplicate: false,
+    });
+  }
+
+  for (let i = 0; i < 2; i++) {
+    counter++;
+    mockList.push({
+      id: `imp-${counter}`,
+      wpp_number: `WPP-2026-${counter}`,
+      no_faktur: `WPP-2026-${counter}`,
+      client_name: 'PT ASPIRASI HIDUP INDONESIA TBK',
+      item_description: `URGENT EVENT PROMO BACKDROP #${i + 1}`,
+      total_price: 1200000 + (i * 50000),
+      import_date: fourDaysAgo,
+      status: 'waiting',
+      isDuplicate: false,
+    });
+  }
+
+  for (let i = 0; i < 10; i++) {
+    counter++;
+    mockList.push({
+      id: `imp-${counter}`,
+      wpp_number: `WPP-2026-${counter}`,
+      no_faktur: `WPP-2026-${counter}`,
+      client_name: 'PT PMG INTEGRASI KOMUNIKASI',
+      item_description: `REVISED CORRUGATED BOX & STICKER #${i + 1}`,
+      total_price: 450000 + (i * 20000),
+      import_date: oneDayAgo,
+      status: 'rejected',
+      reject_reason: i % 2 === 0 ? 'salah quantity' : 'harga unit tidak sesuai PO',
+      isDuplicate: false,
+    });
+  }
+
+  return mockList;
+};
+
 export default function InvoiceListPage() {
   const router = useRouter();
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const approvedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+
+      const approvedItemIdsSet = new Set();
+      const approvedFaktursSet = new Set();
+      approvedInvoices.forEach((inv) => {
+        inv.items?.forEach((it) => {
+          if (it.id) approvedItemIdsSet.add(it.id);
+          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+          if (f) approvedFaktursSet.add(f);
+        });
+      });
+
+      const waitingItemIdsSet = new Set();
+      const waitingFaktursSet = new Set();
+      approvalQueue.forEach((q) => {
+        q.items?.forEach((it) => {
+          if (it.id) waitingItemIdsSet.add(it.id);
+          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+          if (f) waitingFaktursSet.add(f);
+        });
+      });
+
+      let rawStaging = JSON.parse(
+        localStorage.getItem('wellen_wpp_staging') ||
+        localStorage.getItem('wellen_imported_wpp') ||
+        '[]'
+      );
+
+      if (rawStaging.length === 0 && localStorage.getItem('wellen_wpp_staging') === null) {
+        rawStaging = generate120MockItems();
+        localStorage.setItem('wellen_wpp_staging', JSON.stringify(rawStaging));
+      }
+
+      return rawStaging.filter((it) => {
+        const itemId = it.id;
+        const itemFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
+
+        const isApproved = approvedItemIdsSet.has(itemId) || (itemFaktur && approvedFaktursSet.has(itemFaktur));
+        const isWaiting = waitingItemIdsSet.has(itemId) || (itemFaktur && waitingFaktursSet.has(itemFaktur)) || it.status === 'waiting_approval' || it.status === 'waiting';
+        const isInvoiced = it.status === 'invoiced';
+
+        return !isApproved && !isWaiting && !isInvoiced;
+      });
+    } catch (e) {
+      console.error('Failed to read initial invoice list data:', e);
+      return [];
+    }
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -39,79 +163,6 @@ export default function InvoiceListPage() {
   const [activeReasonId, setActiveReasonId] = useState(null);
   const [sortField, setSortField] = useState('import_date');
   const [sortDirection, setSortDirection] = useState('desc');
-
-  const generate120MockItems = () => {
-    const now = new Date();
-    const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString();
-    const oneDayAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
-    const todayStr = now.toISOString();
-
-    const mockList = [];
-    let counter = 1000;
-
-    for (let i = 0; i < 95; i++) {
-      counter++;
-      mockList.push({
-        id: `imp-${counter}`,
-        wpp_number: `WPP-2026-${counter}`,
-        no_faktur: `WPP-2026-${counter}`,
-        client_name: i % 3 === 0 ? 'PT ASPIRASI HIDUP INDONESIA TBK' : i % 3 === 1 ? 'PT. PMG INTEGRASI KOMUNIKASI' : 'PT DIGITAL CREATIVE ASIA',
-        item_description: `PRINT BANNER & POS MATERIAL BATCH #${i + 1}`,
-        total_price: 150000 + (i * 12500),
-        import_date: todayStr,
-        status: 'ready',
-        isDuplicate: false,
-      });
-    }
-
-    for (let i = 0; i < 13; i++) {
-      counter++;
-      mockList.push({
-        id: `imp-${counter}`,
-        wpp_number: `WPP-2026-${counter}`,
-        no_faktur: `WPP-2026-${counter}`,
-        client_name: 'PT FOODS BEVERAGES INDONESIA',
-        item_description: `STICKER VINYL & ACRYLIC DISPLAY #${i + 1}`,
-        total_price: 280000 + (i * 15000),
-        import_date: oneDayAgo,
-        status: 'waiting',
-        isDuplicate: false,
-      });
-    }
-
-    for (let i = 0; i < 2; i++) {
-      counter++;
-      mockList.push({
-        id: `imp-${counter}`,
-        wpp_number: `WPP-2026-${counter}`,
-        no_faktur: `WPP-2026-${counter}`,
-        client_name: 'PT ASPIRASI HIDUP INDONESIA TBK',
-        item_description: `URGENT EVENT PROMO BACKDROP #${i + 1}`,
-        total_price: 1200000 + (i * 50000),
-        import_date: fourDaysAgo,
-        status: 'waiting',
-        isDuplicate: false,
-      });
-    }
-
-    for (let i = 0; i < 10; i++) {
-      counter++;
-      mockList.push({
-        id: `imp-${counter}`,
-        wpp_number: `WPP-2026-${counter}`,
-        no_faktur: `WPP-2026-${counter}`,
-        client_name: 'PT GLOBAL MARKETING SOLUTION',
-        item_description: `POSTER BOARD GLOSSY A1 #${i + 1}`,
-        total_price: 450000 + (i * 20000),
-        import_date: oneDayAgo,
-        status: 'rejected',
-        reject_reason: i % 2 === 0 ? 'salah quantity' : 'harga unit tidak sesuai PO',
-        isDuplicate: false,
-      });
-    }
-
-    return mockList;
-  };
 
   const loadData = () => {
     try {
@@ -167,7 +218,6 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
-    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);
@@ -427,6 +477,9 @@ export default function InvoiceListPage() {
         <div className="relative flex-1 min-w-[280px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
+            id="invoice-search"
+            name="invoiceSearch"
+            aria-label="Search WPP No., Client PT, or Description"
             type="text"
             placeholder="Search WPP No., Client PT, or Description..."
             value={searchTerm}
@@ -442,6 +495,9 @@ export default function InvoiceListPage() {
           <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
             <Filter size={14} className="text-stone-400 shrink-0" />
             <select
+              id="invoice-status-filter"
+              name="statusFilter"
+              aria-label="Filter status invoice"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -461,6 +517,9 @@ export default function InvoiceListPage() {
           <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
             <span className="text-stone-400 text-[11px]">Tampilkan:</span>
             <select
+              id="invoice-page-size"
+              name="pageSize"
+              aria-label="Jumlah item per halaman"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));

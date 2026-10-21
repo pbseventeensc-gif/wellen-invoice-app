@@ -9,56 +9,8 @@ import { supabase } from '@/lib/supabase';
 export default function CreateInvoicePage() {
   const router = useRouter();
 
-  // Form State
-  const [wppNumber, setWppNumber] = useState('WPK 0826-702909');
-  const [invoiceDate, setInvoiceDate] = useState('2026-09-10');
-  const [createdByName, setCreatedByName] = useState('FAHADA');
-  const [clientName, setClientName] = useState('PT DIGITAL CREATIVE ASIA');
-  const [clientAddress, setClientAddress] = useState(
-    'EightyEight @Kasablanka Office Tower Lt. 30 Unit B\nJl. Casablanca Kav. 88 Tebet Jakarta Selatan - DKI Jakarta\n021 - 29820243'
-  );
-  const [promoName, setPromoName] = useState('STICKER VINYL INDOOR GLOSSY');
-  const [isDppActive, setIsDppActive] = useState(false);
-
-  // Toggle ON/OFF Rincian Tax Breakdown di Invoice Cetak/Validation
-  const [showTaxBreakdownInPrint, setShowTaxBreakdownInPrint] = useState(false);
-
-  // Parameter Mode Import PO
-  const [isPoExclVatActive, setIsPoExclVatActive] = useState(false);
-  const [showJasaCetakPo, setShowJasaCetakPo] = useState(true);
-
-  // Sumber Import Mode: 'excel' vs 'po'
-  const [importSource, setImportSource] = useState('excel');
-
-  // State Item Toko Murni
-  const [stores, setStores] = useState([]);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isFahadaLocked, setIsFahadaLocked] = useState(false);
-
-  // Auto detect AR Staff Name from Supabase User Email
-  useEffect(() => {
-    const loadArUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.email) {
-          const email = user.email.toLowerCase();
-          if (email.includes('keyjia')) {
-            setCreatedByName('KEYJIA');
-            setIsFahadaLocked(false);
-          } else if (email.includes('fahada')) {
-            setCreatedByName('FAHADA');
-            setIsFahadaLocked(true);
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    loadArUser();
-  }, []);
-
-  // Load Data
-  useEffect(() => {
+  const getInitialStagedData = () => {
+    if (typeof window === 'undefined') return null;
     try {
       const storedSource = sessionStorage.getItem('wellen_import_source');
       const staged = sessionStorage.getItem('wellen_staged_items');
@@ -67,27 +19,23 @@ export default function CreateInvoicePage() {
         const parsed = JSON.parse(staged);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const isPo = storedSource === 'po' || parsed.some((s) => s.isPoSource || s.importType === 'po' || (s.uom && s.uom !== 'PCS'));
-          setImportSource(isPo ? 'po' : 'excel');
 
-          if (parsed[0]?.client_name) setClientName(parsed[0].client_name);
-          if (parsed[0]?.promo_name) setPromoName(parsed[0].promo_name);
+          let fakturNo = 'WPK 0826-702909';
           if (parsed[0]?.no_faktur || parsed[0]?.wpp_number) {
-            let fakturNo = String(parsed[0].no_faktur || parsed[0].wpp_number);
+            fakturNo = String(parsed[0].no_faktur || parsed[0].wpp_number);
             if (fakturNo.toUpperCase().includes('WPP')) {
               fakturNo = fakturNo.replace(/WPP/gi, 'WPK');
             }
-            setWppNumber(fakturNo);
           }
 
           const validStores = parsed.map((s, idx) => {
             const rawTotalFaktur = Number(s.total_faktur || s.total_price || s.raw_total || s.nilai_wpp || 0);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
-
             const isJasa = (s.item_description || s.store_name || '').toUpperCase().trim() === 'JASA CETAK';
 
             return {
               ...s,
-              id: s.id || `store-${idx}-${Date.now()}`,
+              id: s.id || `store-${idx}-${idx}`,
               total_faktur: breakdown.totalFaktur,
               dpp: s.dpp !== undefined ? Number(s.dpp) : breakdown.dpp,
               nilai_barang: s.nilai_barang !== undefined ? Number(s.nilai_barang) : breakdown.nilaiBarang,
@@ -104,17 +52,73 @@ export default function CreateInvoicePage() {
             };
           });
 
-          setStores(validStores);
-          setIsInitialized(true);
-          return;
+          return {
+            isPo,
+            clientName: parsed[0]?.client_name || 'PT DIGITAL CREATIVE ASIA',
+            promoName: parsed[0]?.promo_name || 'STICKER VINYL INDOOR GLOSSY',
+            fakturNo,
+            stores: validStores,
+          };
         }
       }
     } catch (e) {
       console.error('Failed to read staged data:', e);
     }
+    return null;
+  };
 
-    setStores([]);
-    setIsInitialized(true);
+  const [initialData] = useState(getInitialStagedData);
+
+  // Form State
+  const [wppNumber, setWppNumber] = useState(initialData?.fakturNo || 'WPK 0826-702909');
+  const [invoiceDate, setInvoiceDate] = useState('2026-09-10');
+  const [createdByName, setCreatedByName] = useState('FAHADA');
+  const [clientName, setClientName] = useState(initialData?.clientName || 'PT DIGITAL CREATIVE ASIA');
+  const [clientAddress, setClientAddress] = useState(
+    'EightyEight @Kasablanka Office Tower Lt. 30 Unit B\nJl. Casablanca Kav. 88 Tebet Jakarta Selatan - DKI Jakarta\n021 - 29820243'
+  );
+  const [promoName, setPromoName] = useState(initialData?.promoName || 'STICKER VINYL INDOOR GLOSSY');
+  const [isDppActive, setIsDppActive] = useState(false);
+
+  // Toggle ON/OFF Rincian Tax Breakdown di Invoice Cetak/Validation
+  const [showTaxBreakdownInPrint, setShowTaxBreakdownInPrint] = useState(false);
+
+  // Parameter Mode Import PO
+  const [isPoExclVatActive, setIsPoExclVatActive] = useState(false);
+  const [showJasaCetakPo, setShowJasaCetakPo] = useState(true);
+
+  // Sumber Import Mode: 'excel' vs 'po'
+  const [importSource, setImportSource] = useState(initialData?.isPo ? 'po' : 'excel');
+
+  // State Item Toko Murni
+  const [stores, setStores] = useState(initialData?.stores || []);
+  const [isInitialized, setIsInitialized] = useState(true);
+  const [isFahadaLocked, setIsFahadaLocked] = useState(false);
+
+  // Auto detect AR Staff Name from Supabase User Email
+  useEffect(() => {
+    let isMounted = true;
+    const loadArUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email && isMounted) {
+          const email = user.email.toLowerCase();
+          if (email.includes('keyjia')) {
+            setCreatedByName('KEYJIA');
+            setIsFahadaLocked(false);
+          } else if (email.includes('fahada')) {
+            setCreatedByName('FAHADA');
+            setIsFahadaLocked(true);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadArUser();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleRemoveStore = (indexToRemove) => {
@@ -203,8 +207,9 @@ export default function CreateInvoicePage() {
       return;
     }
 
+    const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'sub';
     const payload = {
-      id: `wpk-${Date.now()}`,
+      id: `wpk-${uniqueId}`,
       invoice_number: wppNumber,
       invoice_date: invoiceDate,
       client_name: clientName,
@@ -285,6 +290,7 @@ export default function CreateInvoicePage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            aria-label="Back to previous page"
             onClick={() => router.back()}
             className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-stone-700 shadow-2xs"
           >
@@ -312,10 +318,12 @@ export default function CreateInvoicePage() {
       {/* Baris Identitas Faktur */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Document Identity</p>
+          <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Document Identity</p>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">WPK Number</label>
+            <label htmlFor="wpk-number" className="text-[11px] font-semibold text-stone-600 block mb-1">WPK Number</label>
             <input
+              id="wpk-number"
+              name="wpkNumber"
               type="text"
               value={wppNumber}
               disabled
@@ -323,8 +331,10 @@ export default function CreateInvoicePage() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Invoice Date (Editable)</label>
+            <label htmlFor="invoice-date" className="text-[11px] font-semibold text-stone-600 block mb-1">Invoice Date (Editable)</label>
             <input
+              id="invoice-date"
+              name="invoiceDate"
               type="date"
               value={invoiceDate}
               onChange={(e) => setInvoiceDate(e.target.value)}
@@ -332,8 +342,10 @@ export default function CreateInvoicePage() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Created By (AR Staff)</label>
+            <label htmlFor="created-by" className="text-[11px] font-semibold text-stone-600 block mb-1">Created By (AR Staff)</label>
             <select
+              id="created-by"
+              name="createdByName"
               value={createdByName}
               onChange={(e) => setCreatedByName(e.target.value)}
               disabled={isFahadaLocked}
@@ -345,16 +357,18 @@ export default function CreateInvoicePage() {
               <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
             </select>
             {isFahadaLocked && (
-              <p className="text-[10px] text-stone-400 mt-1 italic">Locked (Logged in as FAHADA)</p>
+              <p className="text-[10px] text-stone-500 mt-1 italic">Locked (Logged in as FAHADA)</p>
             )}
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Bill to (Client)</p>
+          <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Bill to (Client)</p>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Client Name (PT)</label>
+            <label htmlFor="client-name" className="text-[11px] font-semibold text-stone-600 block mb-1">Client Name (PT)</label>
             <input
+              id="client-name"
+              name="clientName"
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
@@ -362,8 +376,10 @@ export default function CreateInvoicePage() {
             />
           </div>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Address & Contact</label>
+            <label htmlFor="client-address" className="text-[11px] font-semibold text-stone-600 block mb-1">Address & Contact</label>
             <textarea
+              id="client-address"
+              name="clientAddress"
               rows={3}
               value={clientAddress}
               onChange={(e) => setClientAddress(e.target.value)}
@@ -373,10 +389,12 @@ export default function CreateInvoicePage() {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Project Parameters</p>
+          <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Project Parameters</p>
           <div>
-            <label className="text-[11px] font-medium text-stone-500 block mb-1">Promo / Material Name</label>
+            <label htmlFor="promo-name" className="text-[11px] font-semibold text-stone-600 block mb-1">Promo / Material Name</label>
             <input
+              id="promo-name"
+              name="promoName"
               type="text"
               value={promoName}
               onChange={(e) => setPromoName(e.target.value)}

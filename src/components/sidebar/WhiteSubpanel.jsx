@@ -22,9 +22,48 @@ import {
 export default function WhiteSubpanel() {
   const pathname = usePathname();
   const router = useRouter();
-  const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
-  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
+
+  const [pendingDownloadCount, setPendingDownloadCount] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const stored = localStorage.getItem('wellen_invoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed.filter((inv) => !inv.time_download).length : 0;
+      }
+    } catch {
+      return 0;
+    }
+    return 0;
+  });
+
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const stored = localStorage.getItem('wellen_approval_queue');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed.length : 0;
+      }
+    } catch {
+      return 0;
+    }
+    return 0;
+  });
+
+  const [pendingRejectedCount, setPendingRejectedCount] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+      const waitingCount = approvalQueue.reduce((acc, q) => acc + (q.items?.length || 0), 0) + storedStaging.filter((it) => it.status === 'waiting_approval').length;
+      const rejectedCount = storedStaging.filter((it) => it.status === 'rejected').length;
+      return waitingCount + rejectedCount;
+    } catch {
+      return 0;
+    }
+  });
+
   const [profile, setProfile] = useState({
     name: 'FAHADA',
     role: 'AR Created',
@@ -80,9 +119,6 @@ export default function WhiteSubpanel() {
   };
 
   useEffect(() => {
-    updateApprovedCount();
-    updateApprovalCount();
-    updateRejectedCount();
     window.addEventListener('storage', updateApprovedCount);
     window.addEventListener('storage', updateApprovalCount);
     window.addEventListener('storage', updateRejectedCount);
@@ -140,7 +176,8 @@ export default function WhiteSubpanel() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/login';
+    router.push('/login');
+    router.refresh();
   };
 
   const allInvoiceMenus = [
@@ -158,9 +195,9 @@ export default function WhiteSubpanel() {
 
   const visibleInvoiceMenus = allInvoiceMenus.filter((m) => isRouteAllowed(profile.role, m.href));
   const visibleReportMenus = allReportMenus.filter((m) => {
-    const norm = normalizeRole(profile.role);
-    if (m.href === '/efaktur-export' && (norm === 'ar created' || norm === 'approval')) {
-      return false;
+    if (m.href === '/accounting-reports') {
+      const allowed = ['Super Admin', 'Director', 'Accounting', 'AR Creator', 'Tax', 'Auditor'];
+      return allowed.includes(normalizeRole(profile.role));
     }
     return isRouteAllowed(profile.role, m.href);
   });
@@ -172,13 +209,13 @@ export default function WhiteSubpanel() {
         {/* Header Modul */}
         <div className="mb-6 px-2">
           <h2 className="text-base font-bold text-stone-900 tracking-tight">Sales & Invoicing</h2>
-          <p className="text-[11px] text-stone-400 mt-0.5">Wellen Workspace</p>
+          <p className="text-[11px] text-stone-500 font-medium mt-0.5">Wellen Workspace</p>
         </div>
 
         {/* Section: INVOICES */}
         {visibleInvoiceMenus.length > 0 && (
           <div className="mb-6">
-            <p className="px-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
+            <p className="px-3 text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-2">
               Invoices & Queue
             </p>
             <div className="space-y-1">
@@ -193,12 +230,12 @@ export default function WhiteSubpanel() {
                     href={item.href}
                     className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                        ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs'
                         : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon size={15} className={isActive ? 'text-[#578ef5]' : isStatusApproval ? 'text-rose-500' : 'text-stone-400'} />
+                      <Icon size={15} className={isActive ? 'text-blue-600' : isStatusApproval ? 'text-rose-500' : 'text-stone-400'} />
                       <span>{item.label}</span>
                     </div>
                     {isApprovalQueue && pendingApprovalCount > 0 && (
@@ -219,44 +256,43 @@ export default function WhiteSubpanel() {
         )}
 
         {/* Section: REPORTS */}
-        {(visibleReportMenus.length > 0 || showApprovedInvoices) && (
-          <div>
-            <p className="px-3 text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
-              Reports & Tax
+        {visibleReportMenus.length > 0 && (
+          <div className="mb-6">
+            <p className="px-3 text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-2">
+              Compliance & Reporting
             </p>
             <div className="space-y-1">
               {visibleReportMenus.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
-
                 return (
                   <Link
-                    key={item.label}
+                    key={item.href}
                     href={item.href}
                     className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                       isActive
-                        ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                        ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs'
                         : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                     }`}
                   >
-                    <Icon size={15} className={isActive ? 'text-[#578ef5]' : 'text-stone-400'} />
+                    <Icon size={15} className={isActive ? 'text-blue-600' : 'text-stone-400'} />
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
 
-              {/* Menu Approved Invoices */}
+              {/* Shortcut Approved Invoices */}
               {showApprovedInvoices && (
                 <Link
                   href="/approved-invoices"
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                     pathname === '/approved-invoices'
-                      ? 'bg-[#578ef5]/10 text-[#578ef5] font-semibold border border-[#578ef5]/20 shadow-2xs'
+                      ? 'bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 shadow-2xs'
                       : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <CheckCircle2 size={15} className="text-emerald-600" />
+                    <CheckCircle2 size={15} className={pathname === '/approved-invoices' ? 'text-emerald-700' : 'text-emerald-600'} />
                     <span>Approved Invoices</span>
                   </div>
                   {pendingDownloadCount > 0 && (
@@ -290,13 +326,14 @@ export default function WhiteSubpanel() {
             </div>
             <div>
               <p className="text-xs font-bold text-stone-900 leading-tight">{profile.name}</p>
-              <p className="text-[10px] text-stone-400 font-medium">{profile.role}</p>
+              <p className="text-[10px] text-stone-500 font-semibold">{profile.role}</p>
             </div>
           </div>
 
           <button
             onClick={handleLogout}
             title="Sign out"
+            aria-label="Sign out"
             className="rounded-lg p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
           >
             <LogOut size={15} />

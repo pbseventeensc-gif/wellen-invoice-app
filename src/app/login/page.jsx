@@ -51,7 +51,6 @@ export default function LoginPage() {
 
       if (data?.session) {
         router.push('/invoices');
-        window.location.href = '/invoices';
         return;
       }
 
@@ -105,11 +104,14 @@ export default function LoginPage() {
         {/* Form Input */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
+            <label htmlFor="login-email" className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-600">
               EMAIL ADDRESS
             </label>
             <input
+              id="login-email"
+              name="email"
               type="email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -119,12 +121,15 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-500">
+            <label htmlFor="login-password" className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-stone-600">
               PASSWORD
             </label>
             <div className="relative">
               <input
+                id="login-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -133,9 +138,10 @@ export default function LoginPage() {
               />
               <button
                 type="button"
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 transition hover:text-stone-600 focus:outline-none cursor-pointer"
-                tabIndex={-1}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-500 transition hover:text-stone-700 focus:outline-none cursor-pointer"
+                tabIndex={0}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -145,7 +151,7 @@ export default function LoginPage() {
           <div className="flex justify-end">
             <Link
               href="/forgot-password"
-              className="text-[11px] font-medium text-stone-400 transition hover:text-stone-700"
+              className="text-xs font-semibold text-stone-600 transition hover:text-stone-900"
             >
               Forgot password?
             </Link>

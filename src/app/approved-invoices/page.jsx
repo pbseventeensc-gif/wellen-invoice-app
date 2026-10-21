@@ -72,7 +72,25 @@ const DEFAULT_APPROVED = [
 ];
 
 export default function ApprovedInvoicesPage() {
-  const [invoices, setInvoices] = useState([]);
+  const [invoices, setInvoices] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('wellen_invoices');
+      if (stored !== null) {
+        const parsed = JSON.parse(stored);
+        const dataList = Array.isArray(parsed) ? parsed : [];
+        return Array.from(
+          new Map(dataList.map((item) => [item.id || item.invoice_number, item])).values()
+        );
+      } else {
+        localStorage.setItem('wellen_invoices', JSON.stringify(DEFAULT_APPROVED));
+        return DEFAULT_APPROVED;
+      }
+    } catch (e) {
+      console.error('Failed to load invoices:', e);
+      return [];
+    }
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState('ALL');
   const [selectedCreator, setSelectedCreator] = useState('ALL');
@@ -108,7 +126,6 @@ export default function ApprovedInvoicesPage() {
   };
 
   useEffect(() => {
-    loadInvoices();
     window.addEventListener('storage', loadInvoices);
     return () => window.removeEventListener('storage', loadInvoices);
   }, []);
@@ -317,6 +334,9 @@ export default function ApprovedInvoicesPage() {
         <div className="relative flex-1 min-w-[280px]">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
+            id="approved-search"
+            name="approvedSearch"
+            aria-label="Search WPK invoice number, store name, or promo"
             type="text"
             placeholder="Search WPK invoice number, store name, or promo..."
             value={searchTerm}
@@ -332,6 +352,9 @@ export default function ApprovedInvoicesPage() {
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <Building2 size={14} className="text-stone-400" />
             <select
+              id="approved-client-filter"
+              name="clientFilter"
+              aria-label="Filter client PT"
               value={selectedClient}
               onChange={(e) => {
                 setSelectedClient(e.target.value);
@@ -350,6 +373,9 @@ export default function ApprovedInvoicesPage() {
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <User size={14} className="text-stone-400" />
             <select
+              id="approved-creator-filter"
+              name="creatorFilter"
+              aria-label="Filter creator AR"
               value={selectedCreator}
               onChange={(e) => {
                 setSelectedCreator(e.target.value);
@@ -573,8 +599,11 @@ export default function ApprovedInvoicesPage() {
           <div className="p-4 bg-stone-50/80 border-t border-stone-200/80 rounded-b-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-600">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-stone-500">Tampilkan per halaman:</span>
+                <label htmlFor="approved-page-size" className="font-medium text-stone-500">Tampilkan per halaman:</label>
                 <select
+                  id="approved-page-size"
+                  name="pageSize"
+                  aria-label="Tampilkan per halaman"
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
