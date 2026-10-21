@@ -28,7 +28,7 @@ export default function AccountingReportsPage() {
       const stored = localStorage.getItem('wellen_invoices');
       if (stored) {
         const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed) ? parsed.filter((it) => !it.id?.startsWith('wpk-default')) : [];
       }
     } catch (e) {
       console.error('Failed to load invoice data:', e);
@@ -45,7 +45,7 @@ export default function AccountingReportsPage() {
       const stored = localStorage.getItem('wellen_invoices');
       if (stored) {
         const parsed = JSON.parse(stored);
-        setInvoices(Array.isArray(parsed) ? parsed : []);
+        setInvoices(Array.isArray(parsed) ? parsed.filter((it) => !it.id?.startsWith('wpk-default')) : []);
       } else {
         setInvoices([]);
       }

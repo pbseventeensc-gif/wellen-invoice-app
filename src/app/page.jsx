@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   FileSpreadsheet,
@@ -11,6 +14,68 @@ import {
 } from 'lucide-react';
 
 export default function HomePage() {
+  const getInitialStats = () => {
+    if (typeof window === 'undefined') {
+      return { totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 };
+    }
+    try {
+      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const storedQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+      const storedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
+
+      const stagingList = Array.isArray(storedStaging) ? storedStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-')) : [];
+      const queueList = Array.isArray(storedQueue) ? storedQueue.filter((it) => it.id !== 'wpk-1001') : [];
+      const invoiceList = Array.isArray(storedInvoices) ? storedInvoices.filter((it) => !it.id?.startsWith('wpk-default')) : [];
+
+      const readyItems = stagingList.filter((it) => it.status === 'ready' || (!it.status || it.status === 'staged'));
+
+      return {
+        totalStaging: stagingList.length,
+        pendingApproval: queueList.length,
+        approvedCount: invoiceList.length,
+        readyCount: readyItems.length,
+      };
+    } catch {
+      return { totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 };
+    }
+  };
+
+  const [stats, setStats] = useState(getInitialStats);
+
+  const loadStats = () => {
+    try {
+      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      const storedQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
+      const storedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
+
+      const stagingList = Array.isArray(storedStaging) ? storedStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-')) : [];
+      const queueList = Array.isArray(storedQueue) ? storedQueue.filter((it) => it.id !== 'wpk-1001') : [];
+      const invoiceList = Array.isArray(storedInvoices) ? storedInvoices.filter((it) => !it.id?.startsWith('wpk-default')) : [];
+
+      const readyItems = stagingList.filter((it) => it.status === 'ready' || (!it.status || it.status === 'staged'));
+
+      setStats({
+        totalStaging: stagingList.length,
+        pendingApproval: queueList.length,
+        approvedCount: invoiceList.length,
+        readyCount: readyItems.length,
+      });
+    } catch (e) {
+      console.error('Failed to load dashboard stats:', e);
+      setStats({
+        totalStaging: 0,
+        pendingApproval: 0,
+        approvedCount: 0,
+        readyCount: 0,
+      });
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('storage', loadStats);
+    return () => window.removeEventListener('storage', loadStats);
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16">
       {/* Page Header */}
@@ -42,7 +107,7 @@ export default function HomePage() {
               <FileText size={16} />
             </div>
           </div>
-          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">120</p>
+          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.totalStaging}</p>
           <div className="flex items-center gap-1.5 mt-2 text-[11px] text-stone-600 font-normal">
             <TrendingUp size={12} className="text-blue-600" />
             <span>Active import staging</span>
@@ -56,7 +121,7 @@ export default function HomePage() {
               <Clock size={16} />
             </div>
           </div>
-          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">15</p>
+          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.pendingApproval}</p>
           <div className="flex items-center gap-1.5 mt-2 text-[11px] text-blue-700 font-medium">
             <span>Requires manager approval</span>
           </div>
@@ -69,7 +134,7 @@ export default function HomePage() {
               <CheckCircle2 size={16} />
             </div>
           </div>
-          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">2</p>
+          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.approvedCount}</p>
           <div className="flex items-center gap-1.5 mt-2 text-[11px] text-emerald-700 font-medium">
             <span>Ready for printing & DJP</span>
           </div>
@@ -82,7 +147,7 @@ export default function HomePage() {
               <FileSpreadsheet size={16} />
             </div>
           </div>
-          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">95</p>
+          <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.readyCount}</p>
           <div className="flex items-center gap-1.5 mt-2 text-[11px] text-stone-600 font-normal">
             <span>Ready for invoice generation</span>
           </div>

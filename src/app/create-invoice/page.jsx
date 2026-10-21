@@ -20,7 +20,7 @@ export default function CreateInvoicePage() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const isPo = storedSource === 'po' || parsed.some((s) => s.isPoSource || s.importType === 'po' || (s.uom && s.uom !== 'PCS'));
 
-          let fakturNo = 'WPK 0826-702909';
+          let fakturNo = '';
           if (parsed[0]?.no_faktur || parsed[0]?.wpp_number) {
             fakturNo = String(parsed[0].no_faktur || parsed[0].wpp_number);
             if (fakturNo.toUpperCase().includes('WPP')) {
@@ -54,8 +54,8 @@ export default function CreateInvoicePage() {
 
           return {
             isPo,
-            clientName: parsed[0]?.client_name || 'PT DIGITAL CREATIVE ASIA',
-            promoName: parsed[0]?.promo_name || 'STICKER VINYL INDOOR GLOSSY',
+            clientName: parsed[0]?.client_name || '',
+            promoName: parsed[0]?.promo_name || '',
             fakturNo,
             stores: validStores,
           };
@@ -70,14 +70,12 @@ export default function CreateInvoicePage() {
   const [initialData] = useState(getInitialStagedData);
 
   // Form State
-  const [wppNumber, setWppNumber] = useState(initialData?.fakturNo || 'WPK 0826-702909');
-  const [invoiceDate, setInvoiceDate] = useState('2026-09-10');
+  const [wppNumber, setWppNumber] = useState(initialData?.fakturNo || '');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [createdByName, setCreatedByName] = useState('FAHADA');
-  const [clientName, setClientName] = useState(initialData?.clientName || 'PT DIGITAL CREATIVE ASIA');
-  const [clientAddress, setClientAddress] = useState(
-    'EightyEight @Kasablanka Office Tower Lt. 30 Unit B\nJl. Casablanca Kav. 88 Tebet Jakarta Selatan - DKI Jakarta\n021 - 29820243'
-  );
-  const [promoName, setPromoName] = useState(initialData?.promoName || 'STICKER VINYL INDOOR GLOSSY');
+  const [clientName, setClientName] = useState(initialData?.clientName || '');
+  const [clientAddress, setClientAddress] = useState('');
+  const [promoName, setPromoName] = useState(initialData?.promoName || '');
   const [isDppActive, setIsDppActive] = useState(false);
 
   // Toggle ON/OFF Rincian Tax Breakdown di Invoice Cetak/Validation

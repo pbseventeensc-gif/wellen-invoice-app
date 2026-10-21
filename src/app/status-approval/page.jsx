@@ -30,12 +30,12 @@ export default function StatusApprovalPage() {
       const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
       const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
 
-      // 1. Get rejected items from staging
-      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected');
+      // 1. Get rejected items from staging (filter out mock)
+      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected' && !it.id?.startsWith('imp-'));
 
       // 2. Get waiting items from approval queue (flatten items)
       const waitingRows = [];
-      approvalQueue.forEach((q) => {
+      approvalQueue.filter((q) => q.id !== 'wpk-1001').forEach((q) => {
         const arName = q.ar_name || q.created_by || 'FAHADA';
         q.items?.forEach((it) => {
           waitingRows.push({
@@ -80,12 +80,12 @@ export default function StatusApprovalPage() {
       const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
       const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
 
-      // 1. Get rejected items from staging
-      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected');
+      // 1. Get rejected items from staging (filter out mock)
+      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected' && !it.id?.startsWith('imp-'));
 
       // 2. Get waiting items from approval queue (flatten items)
       const waitingRows = [];
-      approvalQueue.forEach((q) => {
+      approvalQueue.filter((q) => q.id !== 'wpk-1001').forEach((q) => {
         const arName = q.ar_name || q.created_by || 'FAHADA';
         q.items?.forEach((it) => {
           waitingRows.push({

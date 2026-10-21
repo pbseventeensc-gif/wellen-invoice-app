@@ -16,7 +16,8 @@ import {
   ArrowUpRight,
   CheckCircle2,
   AlertCircle,
-  LogOut
+  LogOut,
+  Trash2
 } from 'lucide-react';
 
 export default function WhiteSubpanel() {
@@ -131,7 +132,66 @@ export default function WhiteSubpanel() {
     }
   };
 
+  const cleanLegacyMockData = () => {
+    try {
+      const storedInvoices = localStorage.getItem('wellen_invoices');
+      if (storedInvoices) {
+        const parsed = JSON.parse(storedInvoices);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((it) => !it.id?.startsWith('wpk-default'));
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('wellen_invoices', JSON.stringify(cleaned));
+          }
+        }
+      }
+
+      const storedQueue = localStorage.getItem('wellen_approval_queue');
+      if (storedQueue) {
+        const parsed = JSON.parse(storedQueue);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((it) => it.id !== 'wpk-1001');
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('wellen_approval_queue', JSON.stringify(cleaned));
+          }
+        }
+      }
+
+      const storedStaging = localStorage.getItem('wellen_wpp_staging');
+      if (storedStaging) {
+        const parsed = JSON.parse(storedStaging);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-'));
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('wellen_wpp_staging', JSON.stringify(cleaned));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error cleaning legacy mock data:', e);
+    }
+  };
+
+  const handleResetAllData = () => {
+    if (window.confirm('Hapus semua data invoice, antrean approval, dan staging untuk testing bersih?')) {
+      localStorage.removeItem('wellen_invoices');
+      localStorage.removeItem('wellen_approval_queue');
+      localStorage.removeItem('wellen_wpp_staging');
+      localStorage.removeItem('wellen_imported_wpp');
+      sessionStorage.removeItem('wellen_staged_items');
+      sessionStorage.removeItem('wellen_import_source');
+
+      setPendingDownloadCount(0);
+      setPendingApprovalCount(0);
+      setPendingRejectedCount(0);
+
+      window.dispatchEvent(new Event('storage'));
+      alert('Semua data testing telah dibersihkan (0 item). Halaman akan dimuat ulang.');
+      window.location.reload();
+    }
+  };
+
   useEffect(() => {
+    cleanLegacyMockData();
     window.addEventListener('storage', updateApprovedCount);
     window.addEventListener('storage', updateApprovalCount);
     window.addEventListener('storage', updateRejectedCount);
@@ -206,15 +266,10 @@ export default function WhiteSubpanel() {
     { label: 'DJP e-Faktur Exporter', href: '/efaktur-export', icon: ArrowUpRight },
   ];
 
-  const visibleInvoiceMenus = allInvoiceMenus.filter((m) => isRouteAllowed(profile.role, m.href));
-  const visibleReportMenus = allReportMenus.filter((m) => {
-    if (m.href === '/accounting-reports') {
-      const allowed = ['Super Admin', 'Director', 'Accounting', 'AR Creator', 'Tax', 'Auditor'];
-      return allowed.includes(normalizeRole(profile.role));
-    }
-    return isRouteAllowed(profile.role, m.href);
-  });
-  const showApprovedInvoices = isRouteAllowed(profile.role, '/approved-invoices');
+  // Samakan tampilan untuk semua role (Admin & User melihat menu yang sama persis)
+  const visibleInvoiceMenus = allInvoiceMenus;
+  const visibleReportMenus = allReportMenus;
+  const showApprovedInvoices = true;
 
   return (
     <div className="w-64 bg-white border-r border-stone-200/80 flex flex-col justify-between py-6 px-4 shrink-0 select-none">
@@ -318,6 +373,19 @@ export default function WhiteSubpanel() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Reset Data Testing */}
+      <div className="px-1 pb-3">
+        <button
+          onClick={handleResetAllData}
+          type="button"
+          title="Hapus semua data mock/sampel"
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer"
+        >
+          <Trash2 size={13} />
+          <span>Bersihkan Sampel Data</span>
+        </button>
       </div>
 
       {/* Profil User + Tombol Logout */}

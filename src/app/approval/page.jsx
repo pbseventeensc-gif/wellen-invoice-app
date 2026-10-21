@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import {
   Check, 
@@ -15,32 +15,29 @@ import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
 import { supabase } from '@/lib/supabase';
 
-const INITIAL_APPROVAL_QUEUE = [
-  {
-    id: 'wpk-1001',
-    invoice_number: 'WPK 0826-300006',
-    invoice_date: '2026-09-10',
-    client_name: 'PT ASPIRASI HIDUP INDONESIA TBK',
-    client_address: 'EightyEight @Kasablanka Office Tower Lt. 30 Unit B\nJl. Casablanca Kav. 88 Tebet Jakarta Selatan - DKI Jakarta\n021 - 29820243',
-    promo_name: 'PROMO ADHOC WEEKEND BOOM DEALS',
-    created_by: 'FAHADA',
-    ar_name: 'FAHADA',
-    total_harga_net: 3263986,
-    subtotal_net: 2937587,
-    discountJasaCetak: 326399,
-    ppn_amount: 323135,
-    grand_total: 3260722,
-    status: 'waiting_approval',
-    items: [
-      { id: '1', item_description: 'AZKO BINTARO XCHANGE', total_price: 1779166, dpp: 1602852, nilai_barang: 1442567, jasa_cetak: 160285, pph23: 3206, ppn: 176314 },
-      { id: '2', item_description: 'AZKO KOTA KASABLANKA', total_price: 1484820, dpp: 1337676, nilai_barang: 1203908, jasa_cetak: 133768, pph23: 2675, ppn: 147145 },
-    ],
-  },
-];
+const INITIAL_APPROVAL_QUEUE = [];
 
 export default function ApprovalPage() {
-  const [queue, setQueue] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const getInitialQueue = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('wellen_approval_queue');
+      if (stored !== null) {
+        const parsed = JSON.parse(stored);
+        const data = Array.isArray(parsed) ? parsed : [];
+        return data.filter((item) => item.id !== 'wpk-1001');
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  };
+
+  const [queue, setQueue] = useState(getInitialQueue);
+  const [selectedId, setSelectedId] = useState(() => {
+    const init = getInitialQueue();
+    return init.length > 0 ? init[0].id : null;
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [profile, setProfile] = useState({ name: 'RISCA', role: 'Approval' });
 
@@ -74,32 +71,33 @@ export default function ApprovalPage() {
     loadProfile();
   }, []);
 
-  const loadQueue = () => {
+  const loadQueue = useCallback(() => {
     try {
       const stored = localStorage.getItem('wellen_approval_queue');
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         const data = Array.isArray(parsed) ? parsed : [];
-        setQueue(data);
-        if (data.length > 0 && !selectedId) {
-          setSelectedId(data[0].id);
+        const cleaned = data.filter((item) => item.id !== 'wpk-1001');
+        setQueue(cleaned);
+        if (cleaned.length > 0) {
+          setSelectedId((prev) => prev || cleaned[0].id);
+        } else {
+          setSelectedId(null);
         }
       } else {
-        setQueue(INITIAL_APPROVAL_QUEUE);
-        setSelectedId(INITIAL_APPROVAL_QUEUE[0].id);
-        localStorage.setItem('wellen_approval_queue', JSON.stringify(INITIAL_APPROVAL_QUEUE));
+        setQueue([]);
+        setSelectedId(null);
       }
     } catch (err) {
       console.error('Failed to read approval queue:', err);
       setQueue([]);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadQueue();
     window.addEventListener('storage', loadQueue);
     return () => window.removeEventListener('storage', loadQueue);
-  }, []);
+  }, [loadQueue]);
 
   const activeInvoice = queue.find((q) => q.id === selectedId) || queue[0] || null;
 

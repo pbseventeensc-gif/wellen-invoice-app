@@ -23,53 +23,7 @@ import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
 import PrintModal from '@/components/invoice-print/PrintModal';
 
-const DEFAULT_APPROVED = [
-  {
-    id: 'wpk-default-1',
-    invoice_number: 'WPK 0826-702909',
-    invoice_date: '2026-09-10',
-    client_name: 'PT ASPIRASI HIDUP INDONESIA TBK',
-    promo_name: 'PROMO ADHOC WEEKEND BOOM DEALS',
-    total_harga_net: 2937587,
-    is_dpp_active: false,
-    dpp_lain: 2692788,
-    ppn_amount: 323135,
-    grand_total: 3260722,
-    discountJasaCetak: -326399,
-    ar_name: 'FAHADA',
-    time_created: '2026-09-10 12:00',
-    time_approved: '2026-09-10 12:00',
-    time_download: null,
-    status: 'approved',
-    items: [
-      { id: '1', item_description: 'AZKO KOTA KASABLANKA', qty: 1, unit_price: 1484820, total_price: 1484820 },
-      { id: '2', item_description: 'AZKO PEJATEN VILLAGE', qty: 1, unit_price: 7386, total_price: 7386 },
-      { id: '3', item_description: 'AZKO LIPPO MALL KRAMAT JATI', qty: 1, unit_price: 50450, total_price: 50450 },
-      { id: '4', item_description: 'AZKO LP PALEM SEMI', qty: 1, unit_price: 187340, total_price: 187340 },
-    ],
-  },
-  {
-    id: 'wpk-default-2',
-    invoice_number: 'WPK 0826-702908',
-    invoice_date: '2026-08-28',
-    client_name: 'PT. PMG INTEGRASI KOMUNIKASI',
-    promo_name: 'COCA COLA - POSTER MENU COMBO SEIZEL BURGER',
-    total_harga_net: 295000,
-    is_dpp_active: false,
-    dpp_lain: 270417,
-    ppn_amount: 32450,
-    grand_total: 327450,
-    discountJasaCetak: -32778,
-    ar_name: 'FAHADA',
-    time_created: '2026-08-28 10:30',
-    time_approved: '2026-08-28 10:30',
-    time_download: null,
-    status: 'approved',
-    items: [
-      { id: '1', item_description: 'POSTER A3+ COMBO BURGER', qty: 10, unit_price: 29500, total_price: 295000 },
-    ],
-  },
-];
+const DEFAULT_APPROVED = [];
 
 export default function ApprovedInvoicesPage() {
   const [invoices, setInvoices] = useState(() => {
@@ -79,13 +33,16 @@ export default function ApprovedInvoicesPage() {
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         const dataList = Array.isArray(parsed) ? parsed : [];
+        // Hapus sampel invoice lama jika tersisa di browser
+        const cleaned = dataList.filter((item) => !item.id?.startsWith('wpk-default'));
+        if (cleaned.length !== dataList.length) {
+          localStorage.setItem('wellen_invoices', JSON.stringify(cleaned));
+        }
         return Array.from(
-          new Map(dataList.map((item) => [item.id || item.invoice_number, item])).values()
+          new Map(cleaned.map((item) => [item.id || item.invoice_number, item])).values()
         );
-      } else {
-        localStorage.setItem('wellen_invoices', JSON.stringify(DEFAULT_APPROVED));
-        return DEFAULT_APPROVED;
       }
+      return [];
     } catch (e) {
       console.error('Failed to load invoices:', e);
       return [];
@@ -109,15 +66,15 @@ export default function ApprovedInvoicesPage() {
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         const dataList = Array.isArray(parsed) ? parsed : [];
+        const cleaned = dataList.filter((item) => !item.id?.startsWith('wpk-default'));
         
         const uniqueInvoices = Array.from(
-          new Map(dataList.map((item) => [item.id || item.invoice_number, item])).values()
+          new Map(cleaned.map((item) => [item.id || item.invoice_number, item])).values()
         );
 
         setInvoices(uniqueInvoices);
       } else {
-        setInvoices(DEFAULT_APPROVED);
-        localStorage.setItem('wellen_invoices', JSON.stringify(DEFAULT_APPROVED));
+        setInvoices([]);
       }
     } catch (e) {
       console.error('Failed to load invoices:', e);

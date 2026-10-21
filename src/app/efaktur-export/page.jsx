@@ -11,9 +11,23 @@ import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
 
 export default function EfakturExportPage() {
-  const [invoices, setInvoices] = useState([]);
+  const getInitialInvoices = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('wellen_invoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return (Array.isArray(parsed) ? parsed : []).filter((i) => !i.id?.startsWith('wpk-default'));
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  };
+
+  const [invoices, setInvoices] = useState(getInitialInvoices);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(() => getInitialInvoices().map((i) => i.id));
   const [nsfpStart, setNsfpStart] = useState('010.000-26.00000001');
 
   const [npwpMap, setNpwpMap] = useState({
@@ -28,20 +42,21 @@ export default function EfakturExportPage() {
       const stored = localStorage.getItem('wellen_invoices');
       if (stored) {
         const parsed = JSON.parse(stored);
-        const dataList = Array.isArray(parsed) ? parsed : [];
+        const dataList = (Array.isArray(parsed) ? parsed : []).filter((i) => !i.id?.startsWith('wpk-default'));
         setInvoices(dataList);
         setSelectedIds(dataList.map((i) => i.id));
       } else {
         setInvoices([]);
+        setSelectedIds([]);
       }
     } catch (e) {
       console.error('Failed to load invoice data:', e);
       setInvoices([]);
+      setSelectedIds([]);
     }
   };
 
   useEffect(() => {
-    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);

@@ -5,22 +5,27 @@ import { CheckCircle2, X, Search, Printer, FileText } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
 import PrintModal from '@/components/invoice-print/PrintModal';
 
-const DEFAULT_APPROVED_INVOICES = [
-  {
-    id: 'wpk-default-1',
-    invoice_number: 'WPK 0826-702908',
-    invoice_date: '2026-08-28',
-    client_name: 'PT. PMG INTEGRASI KOMUNIKASI',
-    promo_name: 'COCA COLA - POSTER MENU COMBO SEIZEL BURGER',
-    grand_total: 327450,
-    status: 'approved',
-    ar_name: 'FAHADA',
-  },
-];
+const DEFAULT_APPROVED_INVOICES = [];
 
 export default function ApprovedInvoiceSidebar() {
+  const getInitialApprovedList = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('wellen_invoices');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((it) => !it.id?.startsWith('wpk-default'));
+        }
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  };
+
   const [isOpen, setIsOpen] = useState(false);
-  const [approvedList, setApprovedList] = useState([]);
+  const [approvedList, setApprovedList] = useState(getInitialApprovedList);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -31,26 +36,19 @@ export default function ApprovedInvoiceSidebar() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const combined = [
-            ...parsed,
-            ...DEFAULT_APPROVED_INVOICES.filter(
-              (def) => !parsed.some((p) => p.id === def.id || p.invoice_number === def.invoice_number)
-            ),
-          ];
-          setApprovedList(combined);
+          const cleaned = parsed.filter((it) => !it.id?.startsWith('wpk-default'));
+          setApprovedList(cleaned);
           return;
         }
       }
-      setApprovedList(DEFAULT_APPROVED_INVOICES);
-      localStorage.setItem('wellen_invoices', JSON.stringify(DEFAULT_APPROVED_INVOICES));
+      setApprovedList([]);
     } catch (e) {
       console.error(e);
+      setApprovedList([]);
     }
   };
 
   useEffect(() => {
-    loadApprovedInvoices();
-
     const handleStorageUpdate = () => loadApprovedInvoices();
     const handleOpenTrigger = () => {
       loadApprovedInvoices();

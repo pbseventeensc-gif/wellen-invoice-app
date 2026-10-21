@@ -24,79 +24,6 @@ import {
 } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
 
-const generate120MockItems = () => {
-  const now = new Date();
-  const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString();
-  const oneDayAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
-  const todayStr = now.toISOString();
-
-  const mockList = [];
-  let counter = 1000;
-
-  for (let i = 0; i < 95; i++) {
-    counter++;
-    mockList.push({
-      id: `imp-${counter}`,
-      wpp_number: `WPP-2026-${counter}`,
-      no_faktur: `WPP-2026-${counter}`,
-      client_name: i % 3 === 0 ? 'PT ASPIRASI HIDUP INDONESIA TBK' : i % 3 === 1 ? 'PT. PMG INTEGRASI KOMUNIKASI' : 'PT DIGITAL CREATIVE ASIA',
-      item_description: `PRINT BANNER & POS MATERIAL BATCH #${i + 1}`,
-      total_price: 150000 + (i * 12500),
-      import_date: todayStr,
-      status: 'ready',
-      isDuplicate: false,
-    });
-  }
-
-  for (let i = 0; i < 13; i++) {
-    counter++;
-    mockList.push({
-      id: `imp-${counter}`,
-      wpp_number: `WPP-2026-${counter}`,
-      no_faktur: `WPP-2026-${counter}`,
-      client_name: 'PT FOODS BEVERAGES INDONESIA',
-      item_description: `STICKER VINYL & ACRYLIC DISPLAY #${i + 1}`,
-      total_price: 280000 + (i * 15000),
-      import_date: oneDayAgo,
-      status: 'waiting',
-      isDuplicate: false,
-    });
-  }
-
-  for (let i = 0; i < 2; i++) {
-    counter++;
-    mockList.push({
-      id: `imp-${counter}`,
-      wpp_number: `WPP-2026-${counter}`,
-      no_faktur: `WPP-2026-${counter}`,
-      client_name: 'PT ASPIRASI HIDUP INDONESIA TBK',
-      item_description: `URGENT EVENT PROMO BACKDROP #${i + 1}`,
-      total_price: 1200000 + (i * 50000),
-      import_date: fourDaysAgo,
-      status: 'waiting',
-      isDuplicate: false,
-    });
-  }
-
-  for (let i = 0; i < 10; i++) {
-    counter++;
-    mockList.push({
-      id: `imp-${counter}`,
-      wpp_number: `WPP-2026-${counter}`,
-      no_faktur: `WPP-2026-${counter}`,
-      client_name: 'PT PMG INTEGRASI KOMUNIKASI',
-      item_description: `REVISED CORRUGATED BOX & STICKER #${i + 1}`,
-      total_price: 450000 + (i * 20000),
-      import_date: oneDayAgo,
-      status: 'rejected',
-      reject_reason: i % 2 === 0 ? 'salah quantity' : 'harga unit tidak sesuai PO',
-      isDuplicate: false,
-    });
-  }
-
-  return mockList;
-};
-
 export default function InvoiceListPage() {
   const router = useRouter();
   const [items, setItems] = useState(() => {
@@ -131,9 +58,11 @@ export default function InvoiceListPage() {
         '[]'
       );
 
-      if (rawStaging.length === 0 && localStorage.getItem('wellen_wpp_staging') === null) {
-        rawStaging = generate120MockItems();
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(rawStaging));
+      // Bersihkan sampel lama jika ada
+      const cleanedStaging = rawStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-'));
+      if (cleanedStaging.length !== rawStaging.length) {
+        localStorage.setItem('wellen_wpp_staging', JSON.stringify(cleanedStaging));
+        rawStaging = cleanedStaging;
       }
 
       return rawStaging.filter((it) => {
@@ -195,9 +124,11 @@ export default function InvoiceListPage() {
         '[]'
       );
 
-      if (rawStaging.length === 0 && localStorage.getItem('wellen_wpp_staging') === null) {
-        rawStaging = generate120MockItems();
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(rawStaging));
+      // Bersihkan sampel lama jika ada
+      const cleanedStaging = rawStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-'));
+      if (cleanedStaging.length !== rawStaging.length) {
+        localStorage.setItem('wellen_wpp_staging', JSON.stringify(cleanedStaging));
+        rawStaging = cleanedStaging;
       }
 
       const activePendingItems = rawStaging.filter((it) => {
