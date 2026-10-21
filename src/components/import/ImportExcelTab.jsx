@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   Search
 } from 'lucide-react';
-import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
+import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
 
 export default function ImportExcelTab() {
   const router = useRouter();
@@ -100,21 +100,57 @@ export default function ImportExcelTab() {
               clean['netto'] ??
               clean['total netto'];
 
+            // Cek nilai kolom eksplisit dari file Excel jika ada
+            const rawDpp = clean['dpp'] ?? clean['nilai dpp'] ?? clean['dpp total'];
+            const rawNilaiBarang = clean['nilai barang'] ?? clean['barang'] ?? clean['nilai_barang'];
+            const rawJasaCetak = clean['jasa cetak'] ?? clean['jasa_cetak'] ?? clean['jasa'];
+            const rawWht = clean['wht'] ?? clean['pph 23'] ?? clean['pph23'] ?? clean['pph_23'] ?? clean['withholding tax'];
+            const rawDppLainBarang = clean['dpp nilai lain barang'] ?? clean['dpp nilai lain (barang)'] ?? clean['dpp nilai lain - barang'] ?? clean['dpp nilai lain b'] ?? clean['dpp nilai lain'];
+            const rawDppLainJasa = clean['dpp nilai lain jasa cetak'] ?? clean['dpp nilai lain (jasa cetak)'] ?? clean['dpp nilai lain jasa'] ?? clean['dpp nilai lain j'];
+            const rawPpn = clean['ppn'] ?? clean['vat'] ?? clean['ppn 11%'] ?? clean['ppn 12%'] ?? clean['nilai ppn'];
+            const rawTanggal = clean['tanggal'] ?? clean['tgl'] ?? clean['date'] ?? clean['tgl faktur'] ?? clean['tgl_faktur'];
+
+            const parsedDate = parseExcelDate(rawTanggal);
+            const rowDate = parsedDate || currentTimestamp.slice(0, 10);
+
             if (rawTotalVal === undefined || rawTotalVal === '' || rawTotalVal === null || parseCurrencyNumber(rawTotalVal) === 0) {
-              for (const k of Object.keys(clean)) {
-                if (k.includes('no') || k.includes('code') || k.includes('date') || k.includes('id') || k.includes('qty')) {
-                  continue;
-                }
-                const parsed = parseCurrencyNumber(clean[k]);
-                if (parsed > 0) {
-                  rawTotalVal = parsed;
-                  break;
+              if (rawDpp !== undefined && parseCurrencyNumber(rawDpp) > 0) {
+                const parsedDpp = parseCurrencyNumber(rawDpp);
+                const parsedPpn = rawPpn !== undefined ? parseCurrencyNumber(rawPpn) : Math.round(parsedDpp * 0.11);
+                rawTotalVal = parsedDpp + parsedPpn;
+              } else {
+                for (const k of Object.keys(clean)) {
+                  if (k.includes('no') || k.includes('code') || k.includes('date') || k.includes('id') || k.includes('qty')) {
+                    continue;
+                  }
+                  const parsed = parseCurrencyNumber(clean[k]);
+                  if (parsed > 0) {
+                    rawTotalVal = parsed;
+                    break;
+                  }
                 }
               }
             }
 
             const rawTotalFaktur = parseCurrencyNumber(rawTotalVal);
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
+
+            const hasExplicitDpp = rawDpp !== undefined && rawDpp !== '' && rawDpp !== null;
+            const hasExplicitNilaiBarang = rawNilaiBarang !== undefined && rawNilaiBarang !== '' && rawNilaiBarang !== null;
+            const hasExplicitJasaCetak = rawJasaCetak !== undefined && rawJasaCetak !== '' && rawJasaCetak !== null;
+            const hasExplicitWht = rawWht !== undefined && rawWht !== '' && rawWht !== null;
+            const hasExplicitDppLainBarang = rawDppLainBarang !== undefined && rawDppLainBarang !== '' && rawDppLainBarang !== null;
+            const hasExplicitDppLainJasa = rawDppLainJasa !== undefined && rawDppLainJasa !== '' && rawDppLainJasa !== null;
+            const hasExplicitPpn = rawPpn !== undefined && rawPpn !== '' && rawPpn !== null;
+
+            const finalDpp = hasExplicitDpp ? parseCurrencyNumber(rawDpp) : breakdown.dpp;
+            const finalNilaiBarang = hasExplicitNilaiBarang ? parseCurrencyNumber(rawNilaiBarang) : breakdown.nilaiBarang;
+            const finalJasaCetak = hasExplicitJasaCetak ? parseCurrencyNumber(rawJasaCetak) : breakdown.jasaCetak;
+            const finalWht = hasExplicitWht ? parseCurrencyNumber(rawWht) : breakdown.wht;
+            const finalDppLainBarang = hasExplicitDppLainBarang ? parseCurrencyNumber(rawDppLainBarang) : breakdown.dppNilaiLainBarang;
+            const finalDppLainJasa = hasExplicitDppLainJasa ? parseCurrencyNumber(rawDppLainJasa) : breakdown.dppNilaiLainJasaCetak;
+            const finalPpn = hasExplicitPpn ? parseCurrencyNumber(rawPpn) : breakdown.ppn;
+            const finalTotalFaktur = rawTotalFaktur || (finalDpp + finalPpn);
 
             const cleanFaktur = noFaktur.toLowerCase().trim();
             const cleanStore = storeName.toLowerCase().trim();
@@ -167,22 +203,23 @@ export default function ImportExcelTab() {
               promo_name: fileNamePromo,
               store_name: storeName,
               item_description: storeName,
-              raw_total: breakdown.totalFaktur,
-              total_faktur: breakdown.totalFaktur,
-              total_price: breakdown.totalFaktur,
-              nilai_wpp: breakdown.totalFaktur,
-              dpp: breakdown.dpp,
-              nilai_barang: breakdown.nilaiBarang,
-              jasa_cetak: breakdown.jasaCetak,
-              pph23: breakdown.pph23,
-              wht: breakdown.wht,
-              dpp_nilai_lain_barang: breakdown.dppNilaiLainBarang,
-              dpp_nilai_lain_jasa_cetak: breakdown.dppNilaiLainJasaCetak,
-              ppn: breakdown.ppn,
+              raw_total: finalTotalFaktur,
+              total_faktur: finalTotalFaktur,
+              total_price: finalTotalFaktur,
+              nilai_wpp: finalTotalFaktur,
+              dpp: finalDpp,
+              nilai_barang: finalNilaiBarang,
+              jasa_cetak: finalJasaCetak,
+              pph23: finalWht,
+              wht: finalWht,
+              dpp_nilai_lain_barang: finalDppLainBarang,
+              dpp_nilai_lain_jasa_cetak: finalDppLainJasa,
+              ppn: finalPpn,
               qty: 1,
-              unit_price: breakdown.totalFaktur,
-              import_date: currentTimestamp,
-              waktu_import: currentTimestamp.slice(0, 10),
+              unit_price: finalTotalFaktur,
+              import_date: rowDate,
+              invoice_date: rowDate,
+              waktu_import: rowDate,
               status: isAlreadyApproved ? 'invoiced' : isWaitingApproval ? 'waiting_approval' : 'draft',
               isDuplicate: isDuplicate,
               duplicateReason: duplicateReason,
@@ -260,6 +297,7 @@ export default function ImportExcelTab() {
       client_name: detectedClient,
       promo_name: detectedPromo,
       import_date: r.import_date,
+      invoice_date: r.invoice_date || r.import_date,
       status: 'waiting_approval',
     }));
 

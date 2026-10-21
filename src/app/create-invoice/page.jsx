@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
-import { calculateFakturBreakdown, formatRupiah } from '@/utils/taxCalculator';
+import { calculateFakturBreakdown, formatRupiah, parseExcelDate } from '@/utils/taxCalculator';
 import { supabase } from '@/lib/supabase';
 
 export default function CreateInvoicePage() {
@@ -33,35 +33,40 @@ export default function CreateInvoicePage() {
             const breakdown = calculateFakturBreakdown(rawTotalFaktur);
             const isJasa = (s.item_description || s.store_name || '').toUpperCase().trim() === 'JASA CETAK';
 
+            const dpp = s.dpp !== undefined && Number(s.dpp) > 0 ? Number(s.dpp) : breakdown.dpp;
+            const nilaiBarang = s.nilai_barang !== undefined && Number(s.nilai_barang) > 0 ? Number(s.nilai_barang) : breakdown.nilaiBarang;
+            const jasaCetak = s.jasa_cetak !== undefined && Number(s.jasa_cetak) > 0 ? Number(s.jasa_cetak) : breakdown.jasaCetak;
+            const pph23 = s.pph23 !== undefined && Number(s.pph23) > 0 ? Number(s.pph23) : (s.wht !== undefined && Number(s.wht) > 0 ? Number(s.wht) : breakdown.pph23);
+            const wht = s.wht !== undefined && Number(s.wht) > 0 ? Number(s.wht) : pph23;
+            const dppNilaiLainBarang = s.dpp_nilai_lain_barang !== undefined && Number(s.dpp_nilai_lain_barang) > 0 ? Number(s.dpp_nilai_lain_barang) : breakdown.dppNilaiLainBarang;
+            const dppNilaiLainJasaCetak = s.dpp_nilai_lain_jasa_cetak !== undefined && Number(s.dpp_nilai_lain_jasa_cetak) > 0 ? Number(s.dpp_nilai_lain_jasa_cetak) : breakdown.dppNilaiLainJasaCetak;
+            const ppn = s.ppn !== undefined && Number(s.ppn) > 0 ? Number(s.ppn) : breakdown.ppn;
+            const totalFakturRow = rawTotalFaktur || (dpp + ppn);
+
             return {
               ...s,
               id: s.id || `store-${idx}-${idx}`,
-              total_faktur: breakdown.totalFaktur,
-              dpp: s.dpp !== undefined ? Number(s.dpp) : breakdown.dpp,
-              nilai_barang: s.nilai_barang !== undefined ? Number(s.nilai_barang) : breakdown.nilaiBarang,
-              jasa_cetak: s.jasa_cetak !== undefined ? Number(s.jasa_cetak) : breakdown.jasaCetak,
-              pph23: s.pph23 !== undefined ? Number(s.pph23) : breakdown.pph23,
-              wht: s.wht !== undefined ? Number(s.wht) : breakdown.wht,
-              dpp_nilai_lain_barang: s.dpp_nilai_lain_barang !== undefined ? Number(s.dpp_nilai_lain_barang) : breakdown.dppNilaiLainBarang,
-              dpp_nilai_lain_jasa_cetak: s.dpp_nilai_lain_jasa_cetak !== undefined ? Number(s.dpp_nilai_lain_jasa_cetak) : breakdown.dppNilaiLainJasaCetak,
-              ppn: s.ppn !== undefined ? Number(s.ppn) : breakdown.ppn,
+              total_faktur: totalFakturRow,
+              dpp,
+              nilai_barang: nilaiBarang,
+              jasa_cetak: jasaCetak,
+              pph23,
+              wht,
+              dpp_nilai_lain_barang: dppNilaiLainBarang,
+              dpp_nilai_lain_jasa_cetak: dppNilaiLainJasaCetak,
+              ppn,
               qty: Number(s.qty) || 1,
               uom: s.uom || 'PCS',
-              unit_price: Number(s.unit_price) || rawTotalFaktur,
+              unit_price: Number(s.unit_price) || totalFakturRow,
               isJasaCetak: isJasa,
             };
           });
 
           let initialDate = '';
           if (parsed[0]?.invoice_date) {
-            initialDate = parsed[0].invoice_date;
+            initialDate = parseExcelDate(parsed[0].invoice_date) || parsed[0].invoice_date;
           } else if (parsed[0]?.import_date) {
-            try {
-              const d = new Date(parsed[0].import_date);
-              if (!isNaN(d.getTime())) {
-                initialDate = d.toISOString().slice(0, 10);
-              }
-            } catch (e) {}
+            initialDate = parseExcelDate(parsed[0].import_date) || parsed[0].import_date;
           }
 
           return {
@@ -164,13 +169,14 @@ export default function CreateInvoicePage() {
     const effectiveTotalPrice = Math.round(qty * effectiveUnitPrice);
     const breakdown = calculateFakturBreakdown(effectiveTotalPrice);
 
-    const dpp = row.dpp !== undefined && row.dpp > 0 ? Number(row.dpp) : breakdown.dpp;
-    const nilaiBarang = row.nilai_barang !== undefined && row.nilai_barang > 0 ? Number(row.nilai_barang) : breakdown.nilaiBarang;
-    const jasaCetak = row.jasa_cetak !== undefined && row.jasa_cetak > 0 ? Number(row.jasa_cetak) : breakdown.jasaCetak;
-    const pph23 = row.pph23 !== undefined && row.pph23 > 0 ? Number(row.pph23) : breakdown.pph23;
-    const dppNilaiLainBarang = row.dpp_nilai_lain_barang !== undefined && row.dpp_nilai_lain_barang > 0 ? Number(row.dpp_nilai_lain_barang) : breakdown.dppNilaiLainBarang;
-    const dppNilaiLainJasaCetak = row.dpp_nilai_lain_jasa_cetak !== undefined && row.dpp_nilai_lain_jasa_cetak > 0 ? Number(row.dpp_nilai_lain_jasa_cetak) : breakdown.dppNilaiLainJasaCetak;
-    const ppn = row.ppn !== undefined && row.ppn > 0 ? Number(row.ppn) : breakdown.ppn;
+    const dpp = row.dpp !== undefined && Number(row.dpp) > 0 ? Number(row.dpp) : breakdown.dpp;
+    const nilaiBarang = row.nilai_barang !== undefined && Number(row.nilai_barang) > 0 ? Number(row.nilai_barang) : breakdown.nilaiBarang;
+    const jasaCetak = row.jasa_cetak !== undefined && Number(row.jasa_cetak) > 0 ? Number(row.jasa_cetak) : breakdown.jasaCetak;
+    const pph23 = row.pph23 !== undefined && Number(row.pph23) > 0 ? Number(row.pph23) : (row.wht !== undefined && Number(row.wht) > 0 ? Number(row.wht) : breakdown.pph23);
+    const wht = pph23;
+    const dppNilaiLainBarang = row.dpp_nilai_lain_barang !== undefined && Number(row.dpp_nilai_lain_barang) > 0 ? Number(row.dpp_nilai_lain_barang) : breakdown.dppNilaiLainBarang;
+    const dppNilaiLainJasaCetak = row.dpp_nilai_lain_jasa_cetak !== undefined && Number(row.dpp_nilai_lain_jasa_cetak) > 0 ? Number(row.dpp_nilai_lain_jasa_cetak) : breakdown.dppNilaiLainJasaCetak;
+    const ppn = row.ppn !== undefined && Number(row.ppn) > 0 ? Number(row.ppn) : breakdown.ppn;
 
     return {
       ...row,
@@ -180,6 +186,7 @@ export default function CreateInvoicePage() {
       nilaiBarang,
       jasaCetak,
       pph23,
+      wht,
       dppNilaiLainBarang,
       dppNilaiLainJasaCetak,
       ppn,
@@ -212,7 +219,7 @@ export default function CreateInvoicePage() {
 
   const grandTotal = importSource === 'po'
     ? totalPoNetOverall + vatAmount
-    : totalDppOverall + vatAmount - totalPph23Overall;
+    : (totalDppOverall + vatAmount);
 
   const handleSubmitApproval = () => {
     if (stores.length === 0) {
@@ -269,6 +276,7 @@ export default function CreateInvoicePage() {
         nilai_barang: it.nilaiBarang,
         jasa_cetak: it.jasaCetak,
         pph23: it.pph23,
+        wht: it.wht || it.pph23,
         dpp_nilai_lain_barang: it.dppNilaiLainBarang,
         dpp_nilai_lain_jasa_cetak: it.dppNilaiLainJasaCetak,
         ppn: it.ppn,
