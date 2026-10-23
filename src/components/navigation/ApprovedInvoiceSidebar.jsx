@@ -8,24 +8,10 @@ import PrintModal from '@/components/invoice-print/PrintModal';
 const DEFAULT_APPROVED_INVOICES = [];
 
 export default function ApprovedInvoiceSidebar() {
-  const getInitialApprovedList = () => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((it) => !it.id?.startsWith('wpk-default'));
-        }
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  };
-
   const [isOpen, setIsOpen] = useState(false);
-  const [approvedList, setApprovedList] = useState(getInitialApprovedList);
+  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadApprovedInvoices() di useEffect setelah mount.
+  const [approvedList, setApprovedList] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -57,6 +43,10 @@ export default function ApprovedInvoiceSidebar() {
 
     window.addEventListener('storage', handleStorageUpdate);
     window.addEventListener('open-approved-drawer', handleOpenTrigger);
+
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadApprovedInvoices();
 
     return () => {
       window.removeEventListener('storage', handleStorageUpdate);

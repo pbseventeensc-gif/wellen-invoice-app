@@ -11,23 +11,11 @@ import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
 
 export default function EfakturExportPage() {
-  const getInitialInvoices = () => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return (Array.isArray(parsed) ? parsed : []).filter((i) => !i.id?.startsWith('wpk-default'));
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  };
-
-  const [invoices, setInvoices] = useState(getInitialInvoices);
+  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadData() di useEffect setelah mount.
+  const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedIds, setSelectedIds] = useState(() => getInitialInvoices().map((i) => i.id));
+  const [selectedIds, setSelectedIds] = useState([]);
   const [nsfpStart, setNsfpStart] = useState('010.000-26.00000001');
 
   const [npwpMap, setNpwpMap] = useState({
@@ -57,6 +45,9 @@ export default function EfakturExportPage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);

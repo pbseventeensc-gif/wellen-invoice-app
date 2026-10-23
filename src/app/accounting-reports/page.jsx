@@ -22,19 +22,9 @@ function fmtShort(n) {
 }
 
 export default function AccountingReportsPage() {
-  const [invoices, setInvoices] = useState(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed.filter((it) => !it.id?.startsWith('wpk-default')) : [];
-      }
-    } catch (e) {
-      console.error('Failed to load invoice data:', e);
-    }
-    return [];
-  });
+  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadData() di useEffect setelah mount.
+  const [invoices, setInvoices] = useState([]);
   const [role, setRole] = useState('accounting');
   const [periodFilter, setPeriodFilter] = useState('month');
   const [startDate, setStartDate] = useState('2026-09-01');
@@ -56,6 +46,9 @@ export default function AccountingReportsPage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);

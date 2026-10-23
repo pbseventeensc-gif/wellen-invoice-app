@@ -192,7 +192,7 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
                               </td>
                             </>
                           )}
-                          <td className="py-2 px-3 text-right font-mono text-black font-bold">{formatRupiah(it.total_price || it.price || 0)}</td>
+                          <td className="py-2 px-3 text-right font-mono text-black font-bold">{formatRupiah(it.nilai_barang || it.nilaiBarang || it.total_price || it.price || 0)}</td>
                         </tr>
                       );
                     })}

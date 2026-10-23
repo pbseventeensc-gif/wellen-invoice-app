@@ -18,26 +18,10 @@ import { supabase } from '@/lib/supabase';
 const INITIAL_APPROVAL_QUEUE = [];
 
 export default function ApprovalPage() {
-  const getInitialQueue = () => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('wellen_approval_queue');
-      if (stored !== null) {
-        const parsed = JSON.parse(stored);
-        const data = Array.isArray(parsed) ? parsed : [];
-        return data.filter((item) => item.id !== 'wpk-1001');
-      }
-    } catch {
-      return [];
-    }
-    return [];
-  };
-
-  const [queue, setQueue] = useState(getInitialQueue);
-  const [selectedId, setSelectedId] = useState(() => {
-    const init = getInitialQueue();
-    return init.length > 0 ? init[0].id : null;
-  });
+  // Initial state harus identik antara server & client untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadQueue() di useEffect setelah mount.
+  const [queue, setQueue] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [profile, setProfile] = useState({ name: 'RISCA', role: 'Approval' });
 
@@ -115,6 +99,9 @@ export default function ApprovalPage() {
   }, []);
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadQueue();
     window.addEventListener('storage', loadQueue);
     return () => window.removeEventListener('storage', loadQueue);
   }, [loadQueue]);
@@ -472,7 +459,7 @@ export default function ApprovalPage() {
                                 </>
                               )}
                               <td className="py-2 px-3 text-right font-mono text-black font-bold">
-                                {formatRupiah(it.total_price)}
+                                {formatRupiah(it.nilai_barang || it.nilaiBarang || it.total_price || it.price || 0)}
                               </td>
                             </tr>
                           ))}

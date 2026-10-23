@@ -26,60 +26,9 @@ import { formatRupiah } from '@/utils/taxCalculator';
 
 export default function InvoiceListPage() {
   const router = useRouter();
-  const [items, setItems] = useState(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const approvedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-
-      const approvedItemIdsSet = new Set();
-      const approvedFaktursSet = new Set();
-      approvedInvoices.forEach((inv) => {
-        inv.items?.forEach((it) => {
-          if (it.id) approvedItemIdsSet.add(it.id);
-          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-          if (f) approvedFaktursSet.add(f);
-        });
-      });
-
-      const waitingItemIdsSet = new Set();
-      const waitingFaktursSet = new Set();
-      approvalQueue.forEach((q) => {
-        q.items?.forEach((it) => {
-          if (it.id) waitingItemIdsSet.add(it.id);
-          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-          if (f) waitingFaktursSet.add(f);
-        });
-      });
-
-      let rawStaging = JSON.parse(
-        localStorage.getItem('wellen_wpp_staging') ||
-        localStorage.getItem('wellen_imported_wpp') ||
-        '[]'
-      );
-
-      // Bersihkan sampel lama jika ada
-      const cleanedStaging = rawStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-'));
-      if (cleanedStaging.length !== rawStaging.length) {
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(cleanedStaging));
-        rawStaging = cleanedStaging;
-      }
-
-      return rawStaging.filter((it) => {
-        const itemId = it.id;
-        const itemFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-
-        const isApproved = approvedItemIdsSet.has(itemId) || (itemFaktur && approvedFaktursSet.has(itemFaktur));
-        const isWaiting = waitingItemIdsSet.has(itemId) || (itemFaktur && waitingFaktursSet.has(itemFaktur)) || it.status === 'waiting_approval' || it.status === 'waiting';
-        const isInvoiced = it.status === 'invoiced';
-
-        return !isApproved && !isWaiting && !isInvoiced;
-      });
-    } catch (e) {
-      console.error('Failed to read initial invoice list data:', e);
-      return [];
-    }
-  });
+  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadData() di useEffect setelah mount.
+  const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState([]);
@@ -149,6 +98,9 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
   }, []);

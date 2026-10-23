@@ -24,49 +24,14 @@ export default function WhiteSubpanel() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [pendingDownloadCount, setPendingDownloadCount] = useState(() => {
-    if (typeof window === 'undefined') return 0;
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed.filter((inv) => !inv.time_download).length : 0;
-      }
-    } catch {
-      return 0;
-    }
-    return 0;
-  });
+  // Initial state harus identik antara server & client untuk mencegah hydration mismatch.
+  // Nilai dari localStorage disinkronkan di useEffect setelah mount.
+  const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
+  const [profile, setProfile] = useState({ name: 'FAHADA', role: 'Super Admin' });
 
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(() => {
-    if (typeof window === 'undefined') return 0;
-    try {
-      const stored = localStorage.getItem('wellen_approval_queue');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      }
-    } catch {
-      return 0;
-    }
-    return 0;
-  });
-
-  const [pendingRejectedCount, setPendingRejectedCount] = useState(() => {
-    if (typeof window === 'undefined') return 0;
-    try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-      const waitingCount = approvalQueue.reduce((acc, q) => acc + (q.items?.length || 0), 0) + storedStaging.filter((it) => it.status === 'waiting_approval').length;
-      const rejectedCount = storedStaging.filter((it) => it.status === 'rejected').length;
-      return waitingCount + rejectedCount;
-    } catch {
-      return 0;
-    }
-  });
-
-  const [profile, setProfile] = useState(() => {
-    if (typeof window === 'undefined') return { name: 'FAHADA', role: 'Super Admin' };
+  const getProfileFromStorage = () => {
     const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();
     if (savedUser.includes('rizkha') || savedUser.includes('risca')) {
       return { name: 'RISCA', role: 'Approval' };
@@ -81,7 +46,7 @@ export default function WhiteSubpanel() {
       return { name: 'FAHADA', role: 'AR Created' };
     }
     return { name: 'Admin Testing', role: 'Super Admin' };
-  });
+  };
 
   const updateApprovedCount = () => {
     try {
@@ -197,6 +162,11 @@ export default function WhiteSubpanel() {
     window.addEventListener('storage', updateRejectedCount);
 
     const loadProfile = async () => {
+      // Sinkronkan state dari localStorage setelah hydration (mencegah hydration mismatch)
+      setProfile(getProfileFromStorage());
+      updateApprovedCount();
+      updateApprovalCount();
+      updateRejectedCount();
       try {
         const { data: { user } } = await supabase.auth.getUser();
         const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();

@@ -24,45 +24,9 @@ import PrintModal from '@/components/invoice-print/PrintModal';
 
 export default function StatusApprovalPage() {
   const router = useRouter();
-  const getInitialTrackingItems = () => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-
-      // 1. Get rejected items from staging (filter out mock)
-      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected' && !it.id?.startsWith('imp-'));
-
-      // 2. Get waiting items from approval queue (flatten items)
-      const waitingRows = [];
-      approvalQueue.filter((q) => q.id !== 'wpk-1001').forEach((q) => {
-        const arName = q.ar_name || q.created_by || 'FAHADA';
-        q.items?.forEach((it) => {
-          waitingRows.push({
-            ...it,
-            status: 'waiting_approval',
-            client_name: q.client_name || it.client_name || 'PT ASPIRASI HIDUP INDONESIA TBK',
-            ar_name: arName,
-            wpp_number: it.wpp_number || it.no_faktur || q.invoice_number,
-            total_price: it.total_price || it.total_faktur || q.grand_total,
-          });
-        });
-      });
-
-      // Combine both, avoiding duplicate IDs if any
-      const map = new Map();
-      [...waitingRows, ...rejectedRows].forEach((row) => {
-        if (row.id) map.set(row.id, row);
-      });
-
-      return Array.from(map.values());
-    } catch (e) {
-      console.error('Failed to load tracking items:', e);
-      return [];
-    }
-  };
-
-  const [trackingItems, setTrackingItems] = useState(getInitialTrackingItems);
+  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadTrackingItems() di useEffect setelah mount.
+  const [trackingItems, setTrackingItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -114,6 +78,9 @@ export default function StatusApprovalPage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadTrackingItems();
     window.addEventListener('storage', loadTrackingItems);
     return () => window.removeEventListener('storage', loadTrackingItems);
   }, []);

@@ -26,8 +26,9 @@ import PrintModal from '@/components/invoice-print/PrintModal';
 const DEFAULT_APPROVED = [];
 
 export default function ApprovedInvoicesPage() {
-  const [invoices, setInvoices] = useState(() => {
-    if (typeof window === 'undefined') return [];
+  // Membaca invoice dari localStorage (sekaligus membersihkan sampel lama).
+  // Hanya dipanggil di client setelah mount untuk mencegah hydration mismatch.
+  const getStoredInvoices = () => {
     try {
       const stored = localStorage.getItem('wellen_invoices');
       if (stored !== null) {
@@ -47,7 +48,8 @@ export default function ApprovedInvoicesPage() {
       console.error('Failed to load invoices:', e);
       return [];
     }
-  });
+  };
+  const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState('ALL');
   const [selectedCreator, setSelectedCreator] = useState('ALL');
@@ -83,6 +85,9 @@ export default function ApprovedInvoicesPage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInvoices(getStoredInvoices());
     window.addEventListener('storage', loadInvoices);
     return () => window.removeEventListener('storage', loadInvoices);
   }, []);

@@ -85,15 +85,17 @@ export default function CreateInvoicePage() {
     return null;
   };
 
-  const [initialData] = useState(getInitialStagedData);
+  // Initial state null/default (sama di server & client) untuk mencegah hydration mismatch.
+  // Data staging dari sessionStorage dimuat di useEffect setelah mount (lihat di bawah).
+  const [initialData, setInitialData] = useState(null);
 
   // Form State
-  const [wppNumber, setWppNumber] = useState(initialData?.fakturNo || '');
-  const [invoiceDate, setInvoiceDate] = useState(() => initialData?.invoiceDate || new Date().toISOString().slice(0, 10));
+  const [wppNumber, setWppNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [createdByName, setCreatedByName] = useState('FAHADA');
-  const [clientName, setClientName] = useState(initialData?.clientName || '');
+  const [clientName, setClientName] = useState('');
   const [clientAddress, setClientAddress] = useState('');
-  const [promoName, setPromoName] = useState(initialData?.promoName || '');
+  const [promoName, setPromoName] = useState('');
   const [isDppActive, setIsDppActive] = useState(false);
 
   // Toggle ON/OFF Rincian Tax Breakdown di Invoice Cetak/Validation
@@ -104,12 +106,27 @@ export default function CreateInvoicePage() {
   const [showJasaCetakPo, setShowJasaCetakPo] = useState(true);
 
   // Sumber Import Mode: 'excel' vs 'po'
-  const [importSource, setImportSource] = useState(initialData?.isPo ? 'po' : 'excel');
+  const [importSource, setImportSource] = useState('excel');
 
   // State Item Toko Murni
-  const [stores, setStores] = useState(initialData?.stores || []);
+  const [stores, setStores] = useState([]);
   const [isInitialized, setIsInitialized] = useState(true);
   const [isFahadaLocked, setIsFahadaLocked] = useState(false);
+
+  // Muat data staging dari sessionStorage setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+  useEffect(() => {
+    const data = getInitialStagedData();
+    if (!data) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setInitialData(data);
+    setWppNumber(data.fakturNo || '');
+    if (data.invoiceDate) setInvoiceDate(data.invoiceDate);
+    setClientName(data.clientName || '');
+    setPromoName(data.promoName || '');
+    setImportSource(data.isPo ? 'po' : 'excel');
+    setStores(data.stores || []);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   // Auto detect AR Staff Name from Supabase User Email
   useEffect(() => {
@@ -271,9 +288,10 @@ export default function CreateInvoicePage() {
         wpp_number: cleanWpkNumber || it.wpp_number,
         item_description: it.item_description || it.store_name,
         total_faktur: importSource === 'po' ? it.effectiveTotalPrice : it.effectiveTotalPrice || it.dpp,
-        total_price: importSource === 'po' ? it.effectiveTotalPrice : it.effectivenilaiBarang || it.dpp,
+
         dpp: it.dpp,
-        nilai_barang: it.nilaiBarang,
+        total_price: Number(it.nilaiBarang || it.nilai_barang || it.total_faktur || 0),
+        nilai_barang: Number(it.nilaiBarang || it.nilai_barang || 0),
         jasa_cetak: it.jasaCetak,
         pph23: it.pph23,
         wht: it.wht || it.pph23,

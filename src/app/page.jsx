@@ -14,33 +14,9 @@ import {
 } from 'lucide-react';
 
 export default function HomePage() {
-  const getInitialStats = () => {
-    if (typeof window === 'undefined') {
-      return { totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 };
-    }
-    try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const storedQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-      const storedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-
-      const stagingList = Array.isArray(storedStaging) ? storedStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-')) : [];
-      const queueList = Array.isArray(storedQueue) ? storedQueue.filter((it) => it.id !== 'wpk-1001') : [];
-      const invoiceList = Array.isArray(storedInvoices) ? storedInvoices.filter((it) => !it.id?.startsWith('wpk-default')) : [];
-
-      const readyItems = stagingList.filter((it) => it.status === 'ready' || (!it.status || it.status === 'staged'));
-
-      return {
-        totalStaging: stagingList.length,
-        pendingApproval: queueList.length,
-        approvedCount: invoiceList.length,
-        readyCount: readyItems.length,
-      };
-    } catch {
-      return { totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 };
-    }
-  };
-
-  const [stats, setStats] = useState(getInitialStats);
+  // Initial state nol (sama di server & client) untuk mencegah hydration mismatch.
+  // Data dari localStorage dimuat lewat loadStats() di useEffect setelah mount.
+  const [stats, setStats] = useState({ totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 });
 
   const loadStats = () => {
     try {
@@ -72,6 +48,9 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadStats();
     window.addEventListener('storage', loadStats);
     return () => window.removeEventListener('storage', loadStats);
   }, []);

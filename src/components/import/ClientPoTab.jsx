@@ -26,16 +26,19 @@ export default function ClientPoTab() {
   const [poItems, setPoItems] = useState([]);
 
   const [selectedPoIds, setSelectedPoIds] = useState([]);
-  const [remainingBatch, setRemainingBatch] = useState(() => {
-    if (typeof window === 'undefined') return null;
+  // Initial state null (sama di server & client) untuk mencegah hydration mismatch.
+  // Data sisa PO dari localStorage dimuat di useEffect setelah mount.
+  const [remainingBatch, setRemainingBatch] = useState(null);
+
+  useEffect(() => {
     try {
       const storedRem = localStorage.getItem('wellen_po_remaining_items');
-      return storedRem ? JSON.parse(storedRem) : null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (storedRem) setRemainingBatch(JSON.parse(storedRem));
     } catch (e) {
       console.error(e);
-      return null;
     }
-  });
+  }, []);
 
   const handleLoadRemainingBatch = () => {
     if (!remainingBatch) return;
