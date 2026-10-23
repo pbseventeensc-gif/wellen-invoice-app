@@ -271,7 +271,7 @@ export default function CreateInvoicePage() {
         wpp_number: cleanWpkNumber || it.wpp_number,
         item_description: it.item_description || it.store_name,
         total_faktur: importSource === 'po' ? it.effectiveTotalPrice : it.effectiveTotalPrice || it.dpp,
-        total_price: importSource === 'po' ? it.effectiveTotalPrice : it.effectiveTotalPrice || it.dpp,
+        total_price: importSource === 'po' ? it.effectiveTotalPrice : it.effectivenilaiBarang || it.dpp,
         dpp: it.dpp,
         nilai_barang: it.nilaiBarang,
         jasa_cetak: it.jasaCetak,
