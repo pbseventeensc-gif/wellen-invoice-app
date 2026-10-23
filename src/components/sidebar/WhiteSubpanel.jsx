@@ -23,7 +23,7 @@ import {
 export default function WhiteSubpanel() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isMounted, setIsMounted] = useState(false);
+
   const [pendingDownloadCount, setPendingDownloadCount] = useState(() => {
     if (typeof window === 'undefined') return 0;
     try {
@@ -329,7 +329,7 @@ export default function WhiteSubpanel() {
                       <Icon size={15} className={isActive ? 'text-blue-600' : isStatusApproval ? 'text-rose-500' : 'text-stone-400'} />
                       <span>{item.label}</span>
                     </div>
-                    {isMounted && isApprovalQueue && pendingApprovalCount > 0 && (
+                    {isApprovalQueue && pendingApprovalCount > 0 && (
                       <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
                         {pendingApprovalCount}
                       </span>
