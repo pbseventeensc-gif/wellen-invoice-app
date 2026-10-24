@@ -10,9 +10,80 @@ import {
   FileText,
   Plus,
   Layers,
-  CheckCircle2
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
-import { formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
+import { formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
+
+const PDF_MAX_BYTES = 20 * 1024 * 1024;
+const PDF_MAX_PAGES = 100;
+const PO_UNITS = 'M2|M²|EA|PCS|PC|PCE|SET|UNIT|BOX|PACK|ROLL|LOT|LS|M|CM|KG|GRAM|L|LTR|HOUR|HR|DAY|JAM';
+
+function groupPdfTextIntoLines(items) {
+  const rows = [];
+  items
+    .filter((item) => item.str?.trim())
+    .map((item) => ({
+      text: item.str.trim(),
+      x: item.transform[4],
+      y: item.transform[5],
+      width: item.width || 0,
+    }))
+    .sort((a, b) => b.y - a.y || a.x - b.x)
+    .forEach((item) => {
+      let row = rows.find((candidate) => Math.abs(candidate.y - item.y) < 3);
+      if (!row) {
+        row = { y: item.y, items: [] };
+        rows.push(row);
+      }
+      row.items.push(item);
+    });
+
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map((row) => {
+      const sorted = row.items.sort((a, b) => a.x - b.x);
+      return sorted.reduce((text, item, index) => {
+        if (index === 0) return item.text;
+        const previous = sorted[index - 1];
+        const needsSpace = item.x - (previous.x + previous.width) > 2;
+        return `${text}${needsSpace ? ' ' : ''}${item.text}`;
+      }, '').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean);
+}
+
+function parsePoLineItem(line, index) {
+  const amount = '(?:Rp\\.?\\s*)?[\\d][\\d.,]*';
+  const pattern = new RegExp(
+    `^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s+(${PO_UNITS})\\s+(${amount})(?:\\s+(${amount}))?$`,
+    'i'
+  );
+  const match = line.match(pattern);
+  if (!match) return null;
+
+  const description = match[1].trim().replace(/^[\d.)-]+\s*/, '');
+  const quantity = parseCurrencyNumber(match[2]);
+  const unitPrice = parseCurrencyNumber(match[4]);
+  if (!description || quantity <= 0 || unitPrice <= 0) return null;
+
+  return {
+    id: `po-pdf-${Date.now()}-${index}`,
+    description: description.toUpperCase(),
+    qty: quantity,
+    uom: match[3].toUpperCase(),
+    unit_price: unitPrice,
+    isJasaCetak: /jasa cetak/i.test(description),
+  };
+}
+
+function findPdfHeaderValue(lines, pattern) {
+  for (const line of lines) {
+    const match = line.match(pattern);
+    if (match?.[1]) return match[1].trim().replace(/[|,;]+$/, '');
+  }
+  return '';
+}
 
 export default function ClientPoTab() {
   const router = useRouter();
@@ -25,6 +96,8 @@ export default function ClientPoTab() {
   const [poIncludeJasaCetak, setPoIncludeJasaCetak] = useState(false);
   const [poPricesIncludePpn, setPoPricesIncludePpn] = useState(false);
   const [poItems, setPoItems] = useState([]);
+  const [poImportMessage, setPoImportMessage] = useState('');
+  const [isImportingPo, setIsImportingPo] = useState(false);
 
   const [selectedPoIds, setSelectedPoIds] = useState([]);
   // Initial state null (sama di server & client) untuk mencegah hydration mismatch.
@@ -83,17 +156,84 @@ export default function ClientPoTab() {
     setPoPricesIncludePpn(false);
     setPoItems([]);
     setPoIncludeJasaCetak(false);
+    setPoImportMessage('');
   };
 
-  // Dynamic PO Upload Handler (Excel/CSV vs PDF/Image)
-  const handlePoFileUpload = (e) => {
+  const handlePoFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const fileNameLower = file.name.toLowerCase();
     setPoFileName(file.name);
+    setPoImportMessage('');
+    setPoItems([]);
+    setSelectedPoIds([]);
 
-    // 1. Jika File Excel (.xlsx, .xls, .csv): Parse Sheet secara Dinamis!
+    if (fileNameLower.endsWith('.pdf')) {
+      if (file.size > PDF_MAX_BYTES) {
+        setPoImportMessage('Ukuran PDF maksimal 20 MB. PO belum diproses.');
+        return;
+      }
+
+      setIsImportingPo(true);
+      try {
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString();
+
+        const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+        if (document.numPages > PDF_MAX_PAGES) {
+          await document.destroy();
+          throw new Error('PDF melebihi batas 100 halaman.');
+        }
+
+        const lines = [];
+        for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+          const page = await document.getPage(pageNumber);
+          const content = await page.getTextContent();
+          lines.push(...groupPdfTextIntoLines(content.items));
+        }
+        await document.destroy();
+
+        const parsedItems = lines
+          .map((line, index) => parsePoLineItem(line, index))
+          .filter(Boolean);
+
+        const extractedPoNumber = findPdfHeaderValue(lines, /\b(?:po|p\.o\.|purchase order)\s*(?:(?:no\.?|number|#)\s*[:#-]?\s*|[:#-]\s*)([a-z0-9][a-z0-9/-]{2,})/i);
+        const extractedClient = findPdfHeaderValue(lines, /\b(?:vendor|supplier|customer|client|bill to|ship to)\s*[:\-]\s*(.+)$/i);
+        const extractedDate = findPdfHeaderValue(lines, /\b(?:po date|order date|date)\s*[:\-]\s*((?:\d{1,2}[/-]){2}\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})/i);
+        const normalizedDate = parseExcelDate(extractedDate);
+
+        setPoClientName(extractedClient.toUpperCase());
+        setPoNumber(extractedPoNumber.toUpperCase());
+        setPoDate(normalizedDate);
+        setPoPromoName(file.name.replace(/\.[^/.]+$/, '').toUpperCase());
+        setPoItems(parsedItems);
+        setSelectedPoIds(parsedItems.map((item) => item.id));
+
+        if (parsedItems.length === 0) {
+          setPoImportMessage(
+            lines.length < 3
+              ? 'PDF ini tidak memiliki teks yang dapat dibaca (kemungkinan hasil scan). OCR tidak digunakan; isi detail PO dan baris item secara manual.'
+              : 'Teks PDF terbaca, tetapi baris item tidak cocok dengan format otomatis. Periksa file, lalu isi baris secara manual.'
+          );
+        } else {
+          setPoImportMessage(`Berhasil membaca ${parsedItems.length} kandidat baris item. Periksa dan koreksi semua detail sebelum membuat invoice.`);
+        }
+      } catch (error) {
+        console.error('Failed to extract PO details from PDF:', error);
+        setPoItems([]);
+        setSelectedPoIds([]);
+        setPoImportMessage(error.message || 'PDF gagal dibaca. Pastikan file tidak rusak, lalu isi PO secara manual.');
+      } finally {
+        setIsImportingPo(false);
+      }
+      return;
+    }
+
+    // Excel/CSV Purchase Orders are parsed from their first worksheet.
     if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls') || fileNameLower.endsWith('.csv')) {
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -151,48 +291,21 @@ export default function ClientPoTab() {
           if (parsedItems.length > 0) {
             setPoItems(parsedItems);
             setSelectedPoIds(parsedItems.map((item) => item.id));
+            setPoImportMessage(`Berhasil membaca ${parsedItems.length} baris item. Periksa detail sebelum membuat invoice.`);
+          } else {
+            setPoImportMessage('Tidak ada baris item yang terbaca dari sheet pertama. Isi baris PO secara manual.');
           }
         } catch (err) {
           console.error('Failed to parse PO Excel file:', err);
+          setPoImportMessage('File Excel/CSV gagal dibaca. Periksa format file, lalu isi PO secara manual.');
         }
       };
+      reader.onerror = () => setPoImportMessage('File Excel/CSV tidak dapat dibaca oleh browser.');
       reader.readAsArrayBuffer(file);
       return;
     }
 
-    // 2. Jika File PDF / Gambar: Muat 14 Item Lengkap PO Food (F&B Indonesia)
-    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').toUpperCase();
-    const cleanPoNo = nameWithoutExt.includes('FOOD') || nameWithoutExt.includes('F&B') || nameWithoutExt.includes('PO') ? '4607477988' : `PO-${Math.abs(file.name.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().slice(0, 8)}`;
-
-    let clientNameFromExt = 'PT. FOODS BEVERAGES INDONESIA';
-    if (nameWithoutExt.includes('ASPIRASI')) clientNameFromExt = 'PT ASPIRASI HIDUP INDONESIA TBK';
-    else if (nameWithoutExt.includes('PMG')) clientNameFromExt = 'PT. PMG INTEGRASI KOMUNIKASI';
-    else if (nameWithoutExt.includes('DIGITAL')) clientNameFromExt = 'PT DIGITAL CREATIVE ASIA';
-
-    setPoClientName(clientNameFromExt);
-    setPoNumber(cleanPoNo);
-    setPoDate(new Date().toISOString().slice(0, 10));
-    setPoPromoName(nameWithoutExt);
-
-    const defaultPoFoodItems = [
-      { id: 'po-1', description: 'ART CARTON 260 GSM 15X21 CM PRINT 1 SISI PTG KOTAK', qty: 4, uom: 'EA', unit_price: 1748, isJasaCetak: false },
-      { id: 'po-2', description: 'STC VYNIL A3 LAM DOFF (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23477, isJasaCetak: false },
-      { id: 'po-3', description: 'FOAMBOARD NON PRINT (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 23865, isJasaCetak: false },
-      { id: 'po-4', description: 'STICK KAYU SILINDAR BULAT', qty: 3, uom: 'EA', unit_price: 33300, isJasaCetak: false },
-      { id: 'po-5', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 33716, isJasaCetak: false },
-      { id: 'po-6', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1, uom: 'M2', unit_price: 35964, isJasaCetak: false },
-      { id: 'po-7', description: 'PVC FOAMBOARD + STC (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 53676, isJasaCetak: false },
-      { id: 'po-8', description: 'STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 2.34, uom: 'M2', unit_price: 69930, isJasaCetak: false },
-      { id: 'po-9', description: 'JASA CETAK', qty: 1, uom: 'EA', unit_price: 112643, isJasaCetak: true },
-      { id: 'po-10', description: 'FOAMBOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 1.42, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-11', description: 'IMPRABOARD + STC RITRAMA LAM DOFF (PTG BENTUK)', qty: 2.31, uom: 'M2', unit_price: 149850, isJasaCetak: false },
-      { id: 'po-12', description: 'STC ORACAL SOLID BLACK (PTG BENTUK)', qty: 1, uom: 'M2', unit_price: 191375, isJasaCetak: false },
-      { id: 'po-13', description: 'PVC BOARD + STC RITRAMA LAM DOFF (PTG KOTAK)', qty: 1.23, uom: 'M2', unit_price: 239760, isJasaCetak: false },
-      { id: 'po-14', description: 'JASA PASANG VISUAL', qty: 1, uom: 'EA', unit_price: 558885, isJasaCetak: true },
-    ];
-
-    setPoItems(defaultPoFoodItems);
-    setSelectedPoIds(defaultPoFoodItems.map((item) => item.id));
+    setPoImportMessage('Format file tidak didukung. Unggah PO PDF, Excel, atau CSV.');
   };
 
   const handleAddPoItem = () => {
@@ -353,24 +466,37 @@ export default function ClientPoTab() {
         <input
           type="file"
           id="poFileUpload"
-          accept=".pdf, .png, .jpg, .jpeg, .xlsx, .xls, .csv"
+          accept=".pdf, .xlsx, .xls, .csv"
           onChange={handlePoFileUpload}
           className="hidden"
         />
-        <label htmlFor="poFileUpload" className="cursor-pointer flex items-center justify-center gap-4">
+        <label htmlFor="poFileUpload" className={`flex items-center justify-center gap-4 ${isImportingPo ? 'cursor-wait opacity-60' : 'cursor-pointer'}`}>
           <div className="p-2 bg-amber-50 rounded-full text-amber-700 shrink-0">
             <UploadCloud size={22} />
           </div>
           <div className="text-left">
             <p className="text-xs font-bold text-stone-800 leading-tight">
-              {poFileName ? `Uploaded PO File: ${poFileName}` : 'Click to upload or drag Client Purchase Order file (.pdf, .xlsx, .jpg, .png)'}
+              {isImportingPo ? 'Membaca isi file PO...' : poFileName ? `File PO: ${poFileName}` : 'Unggah Purchase Order (.pdf, .xlsx, .xls, .csv)'}
             </p>
             <p className="text-[10px] text-stone-400 mt-0.5 font-normal">
-              {poFileName ? 'PO File Processed. Details extracted into fields below.' : 'Supported file formats: PDF, Excel (.xlsx), or Image Scan (.pdf / .xlsx / .png / .jpg)'}
+              {poFileName ? 'Data hasil ekstraksi perlu diperiksa dan dikoreksi sebelum membuat invoice.' : 'PDF digital dibaca di browser; PDF scan perlu diisi manual. File tidak diunggah ke layanan pihak ketiga.'}
             </p>
           </div>
         </label>
       </div>
+      {poImportMessage && (
+        <div
+          role="status"
+          className={`flex items-start gap-2 rounded-xl border px-3.5 py-3 text-xs ${
+            poItems.length
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-rose-200 bg-rose-50 text-rose-800'
+          }`}
+        >
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>{poImportMessage}</span>
+        </div>
+      )}
 
       {/* Header Metadata PO Form */}
       <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-4">
