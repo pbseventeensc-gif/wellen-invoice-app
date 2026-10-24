@@ -1,22 +1,62 @@
 'use client';
 
-import { Printer, X } from 'lucide-react';
+import { Printer, X, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
+import { useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
 
-export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed }) {
-  if (!isOpen || !invoice) return null;
+const subscribeToPrintPortal = () => () => {};
+const getPrintPortalSnapshot = () => document.body;
+const getServerPrintPortalSnapshot = () => null;
+
+function getInternalDppBreakdown(invoice) {
+  return {
+    goods: Number(invoice.items?.reduce((sum, item) => sum + Number(item.dpp_nilai_lain_barang || 0), 0)
+      || invoice.total_dpp_nilai_lain_barang
+      || invoice.dpp_nilai_lain_barang
+      || 0),
+    printing: Number(invoice.items?.reduce((sum, item) => sum + Number(item.dpp_nilai_lain_jasa_cetak || 0), 0)
+      || invoice.total_dpp_nilai_lain_jasa_cetak
+      || invoice.dpp_nilai_lain_jasa_cetak
+      || 0),
+  };
+}
+
+function getPrintFilename(invoices) {
+  const wpkNumbers = invoices.map((invoice) => {
+    const candidates = [
+      invoice.invoice_number,
+      invoice.wpp_number,
+      invoice.no_faktur,
+      ...(invoice.items || []).flatMap((item) => [item.no_faktur, item.wpp_number]),
+    ].filter(Boolean);
+    return candidates.find((number) => /^WPK\b/i.test(String(number).trim())) || candidates[0];
+  }).filter(Boolean);
+
+  return (wpkNumbers.length ? wpkNumbers.join(' - ') : 'Invoice')
+    .replace(/[\/\\?%*:|"<>]/g, '-');
+}
+
+export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrintConfirmed }) {
+  const [showInternalBreakdown, setShowInternalBreakdown] = useState(false);
+  const portalTarget = useSyncExternalStore(
+    subscribeToPrintPortal,
+    getPrintPortalSnapshot,
+    getServerPrintPortalSnapshot
+  );
+  const printInvoices = invoices?.length ? invoices : invoice ? [invoice] : [];
+
+  if (!isOpen || printInvoices.length === 0 || !portalTarget) return null;
 
   const handlePrint = () => {
     try {
       const originalTitle = document.title;
-      const sanitizedTitle = (invoice.invoice_number || 'Invoice')
-        .replace(/[\/\\?%*:|"<>]/g, '-');
-      document.title = sanitizedTitle;
+      document.title = getPrintFilename(printInvoices);
 
       if (typeof onPrintConfirmed === 'function') {
-        onPrintConfirmed(invoice.id);
+        onPrintConfirmed(printInvoices.map((item) => item.id));
       }
 
       window.print();
@@ -30,64 +70,130 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm p-4 sm:p-6 flex justify-center items-start print:p-0 print:bg-white print:overflow-hidden animate-in fade-in duration-200">
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 0;
-          }
-          html, body {
-            width: 210mm !important;
-            height: 297mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #fff !important;
-            color: #000000 !important;
-            overflow: hidden !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #print-area, #print-area * {
-            visibility: visible;
-          }
-          #print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 210mm !important;
-            height: 297mm !important;
-            box-sizing: border-box !important;
-            padding: 12mm 14mm 12mm 14mm !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            border: none !important;
-            page-break-inside: avoid !important;
-            page-break-after: avoid !important;
-            overflow: hidden !important;
-          }
+  return createPortal((
+    <div className="print-modal-root fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm sm:p-6 print:static print:block print:overflow-visible print:bg-white print:p-0">
+      <style media="print">{`
+        @page {
+          size: A4 portrait;
+          margin: 0;
+        }
+        html, body {
+          width: auto !important;
+          height: auto !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          color: #000 !important;
+          overflow: visible !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        body > *:not(.print-modal-root) {
+          display: none !important;
+        }
+        .print-modal-root {
+          position: static !important;
+          display: block !important;
+          width: auto !important;
+          min-height: 0 !important;
+          overflow: visible !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+        }
+        .print-modal-card,
+        #print-area {
+          width: auto !important;
+          max-width: none !important;
+          height: auto !important;
+          min-height: 0 !important;
+          overflow: visible !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        .print-sheet {
+          display: block !important;
+          width: 210mm !important;
+          min-height: 0 !important;
+          box-sizing: border-box !important;
+          margin: 0 !important;
+          padding: 12mm 14mm !important;
+          overflow: visible !important;
+          -webkit-box-decoration-break: clone !important;
+          box-decoration-break: clone !important;
+          break-inside: auto !important;
+          page-break-inside: auto !important;
+        }
+        .print-sheet:not(:last-child) {
+          break-after: page !important;
+          page-break-after: always !important;
+        }
+        .print-sheet:last-child {
+          break-after: auto !important;
+          page-break-after: auto !important;
+        }
+        .print-sheet.print-density-short {
+          display: flex !important;
+          flex-direction: column !important;
+          min-height: 297mm !important;
+        }
+        .print-sheet.print-density-short .invoice-print-footer {
+          margin-top: 12mm !important;
+        }
+        .print-sheet .invoice-print-footer {
+          margin-top: 8mm;
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        .print-sheet table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+        .print-sheet thead {
+          display: table-header-group !important;
+        }
+        .print-sheet thead th {
+          vertical-align: top !important;
+        }
+        .print-sheet tr,
+        .print-sheet th,
+        .print-sheet td,
+        .print-sheet h1,
+        .print-sheet h2,
+        .print-sheet .rounded-lg {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
         }
       `}</style>
-
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-4 border border-stone-200 print:border-none print:shadow-none print:my-0 animate-in zoom-in-95 duration-150">
+      <div className="print-modal-card my-4 w-[210mm] max-w-[calc(100vw-2rem)] overflow-visible rounded-2xl border border-stone-200 bg-stone-200 shadow-2xl print:my-0 print:block print:w-auto print:max-w-none print:overflow-visible print:border-none print:shadow-none">
         {/* Header Action Bar - Polos & Clean White Style */}
         <div className="sticky top-0 z-20 p-3.5 px-5 bg-white border-b border-stone-200 text-stone-900 flex items-center justify-between shadow-2xs print:hidden">
           <div className="text-xs font-medium flex items-center gap-2.5">
             <span className="text-stone-500">Document Preview:</span>
             <span className="text-stone-900 font-mono font-bold bg-stone-100 px-2.5 py-1 rounded-lg border border-stone-200">
-              {invoice.invoice_number}
+              {printInvoices.length === 1
+                ? printInvoices[0].invoice_number
+                : `${printInvoices.length} invoices selected`}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowInternalBreakdown((visible) => !visible)}
+              aria-pressed={showInternalBreakdown}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              {showInternalBreakdown ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showInternalBreakdown ? 'Hide internal totals' : 'Show internal totals'}
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold px-4 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
             >
               <Printer size={14} />
               Print / Save PDF
@@ -103,64 +209,79 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
         </div>
 
         {/* Kertas Invoice Fisik */}
-        <div id="print-area" className="p-8 text-black bg-white text-xs flex flex-col justify-between min-h-[273mm] box-border">
-          <div className="space-y-4">
-            {/* Header Kop Faktur */}
-            <div className="flex justify-between items-start border-b border-stone-400 pb-3">
-              <div>
-                <div className="flex items-center gap-3">
-                  <WellenLogo />
-                  <div className="flex flex-col justify-center">
-                    <h1 className="text-xl font-bold tracking-tight text-black leading-none">WELLEN PRINT</h1>
-                    <p className="text-[11px] text-black font-medium leading-tight mt-1.5">
-                      Digital Printing & Offset Services
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-black font-medium mt-2 leading-relaxed">
-                  <p>Jl. Pasar Minggu Raya No. 9, Jakarta Selatan</p>
-                  <p>Telp: (021) 7918-0000 | Email: billing@wellenprint.com</p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span className="text-xs font-bold tracking-wider text-black block">INVOICE</span>
-                <p className="font-mono text-sm font-bold text-black mt-0.5">{invoice.invoice_number}</p>
-                <p className="text-[11px] text-black font-medium mt-0.5">
-                  Date: {invoice.invoice_date || invoice.time_created?.slice(0, 10)}
-                </p>
-              </div>
-            </div>
-
-            {/* Info Klien */}
-            <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-300">
-              <span className="text-[10px] font-bold text-black uppercase tracking-wider block mb-0.5">
-                BILL TO:
-              </span>
-              <p className="font-bold text-black text-xs">{invoice.client_name}</p>
-              <p className="text-black text-[11px] whitespace-pre-line mt-0.5 font-medium leading-relaxed">
-                {invoice.client_address || 'Jakarta, Indonesia'}
-              </p>
-            </div>
-
+        <div id="print-area" className="flex flex-col items-center gap-6 bg-stone-200 text-black text-xs print:block print:bg-white">
+          {printInvoices.map((invoice, invoiceIndex) => {
+            const internalBreakdown = getInternalDppBreakdown(invoice);
+            const hasJasaCetakRow = invoice.items?.some(
+              (item) => (item.item_description || item.description || item.store_name || '').toUpperCase() === 'JASA CETAK'
+            );
+            const jasaCetakValue = Number(
+              invoice.total_jasa_cetak ??
+              invoice.totalJasaCetak ??
+              invoice.discountJasaCetak ??
+              invoice.discount_jasa_cetak ??
+              invoice.jasaCetak ??
+              0
+            ) || invoice.items?.reduce((sum, item) => sum + (Number(item.jasa_cetak) || 0), 0) || 0;
+            const rowCount = (invoice.items?.length || 0) + (!hasJasaCetakRow && jasaCetakValue > 0 ? 1 : 0);
+            const densityClass = rowCount <= 6 ? 'print-density-short' : rowCount <= 12 ? 'print-density-medium' : 'print-density-long';
+            return (
+        <div
+          key={invoice.id || `${invoice.invoice_number}-${invoiceIndex}`}
+          className={`print-sheet ${densityClass}`}
+        >
+          <div className="print-sheet-body space-y-4">
             {/* Tabel Rincian Barang Standard */}
             {(() => {
               const isPoSource = invoice.importSource === 'po' || invoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
+              const columnCount = isPoSource ? 5 : 3;
 
               return (
                 <table className="w-full text-left border-collapse border border-stone-400 text-xs">
-                  <thead className="bg-stone-200 border-b border-stone-400">
+                  <thead className="border-b border-stone-400">
                     <tr>
-                      <th className="py-2 px-3 border-r border-stone-400 w-10 text-center text-black font-bold">No</th>
-                      <th className="py-2 px-3 border-r border-stone-400 text-black font-bold">ITEM DESCRIPTION</th>
+                      <th colSpan={columnCount} className="border-b border-stone-400 px-3 py-2 text-black">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="text-left">
+                            <div className="flex items-center gap-2">
+                              <WellenLogo className="print-letterhead-logo h-7 w-5" />
+                              <div>
+                                <p className="print-letterhead-brand text-sm font-bold leading-none">WELLEN PRINT</p>
+                                <p className="print-letterhead-service mt-1 text-[9px] font-medium">Digital Printing & Offset Services</p>
+                              </div>
+                            </div>
+                            <p className="print-letterhead-contact mt-1.5 text-[9px] font-medium leading-relaxed">
+                              Jl. Pasar Minggu Raya No. 9, Jakarta Selatan<br />
+                              Telp: (021) 7918-0000 | Email: billing@wellenprint.com
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span className="block text-[10px] font-bold tracking-wider">INVOICE</span>
+                            <p className="mt-0.5 text-xs font-bold">{invoice.invoice_number}</p>
+                            <p className="mt-0.5 text-[9px] font-medium">
+                              Date: {invoice.invoice_date || invoice.time_created?.slice(0, 10)}
+                            </p>
+                          </div>
+                        </div>
+                      </th>
+                    </tr>
+                    <tr>
+                      <th colSpan={columnCount} className="border-b border-stone-400 px-3 py-2 text-left font-normal text-black">
+                        <span className="mr-1 text-[9px] font-bold uppercase tracking-wider">Bill to:</span>
+                        <span className="text-[10px] font-bold">{invoice.client_name}</span>
+                        <span className="ml-2 text-[9px] font-medium">{invoice.client_address || 'Jakarta, Indonesia'}</span>
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className="bg-stone-200 py-2 px-3 border-r border-stone-400 w-10 text-center text-black font-bold">No</th>
+                      <th className="bg-stone-200 py-2 px-3 border-r border-stone-400 text-black font-bold">ITEM DESCRIPTION</th>
                       {isPoSource && (
                         <>
-                          <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">QTY</th>
-                          <th className="py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">UOM</th>
+                          <th className="bg-stone-200 py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">QTY</th>
+                          <th className="bg-stone-200 py-2 px-2.5 border-r border-stone-400 w-16 text-center text-black font-bold">UOM</th>
                         </>
                       )}
-                      <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
+                      <th className="bg-stone-200 py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-300 font-medium">
@@ -239,7 +360,20 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
           </div>
 
           {/* Footer Kertas Invoice */}
-          <div className="mt-auto pt-6 space-y-4">
+          <div className="invoice-print-footer mt-auto pt-6 space-y-4">
+            {showInternalBreakdown && (
+              <div className="rounded-lg border border-dashed border-amber-500 bg-amber-50/60 p-3 text-[11px] text-black">
+                <p className="mb-1.5 font-bold uppercase tracking-wide">Internal breakdown — DPP Nilai Lain</p>
+                <div className="flex justify-between gap-4">
+                  <span>Total DPP Nilai Lain Barang</span>
+                  <span className="font-mono font-bold">{formatRupiah(internalBreakdown.goods)}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-4">
+                  <span>Total DPP Nilai Lain Jasa Cetak</span>
+                  <span className="font-mono font-bold">{formatRupiah(internalBreakdown.printing)}</span>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-5 items-start">
               <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-300 h-full flex flex-col justify-between">
                 <div>
@@ -362,6 +496,9 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
 
                 <div className="w-48 border-b border-black z-10"></div>
                 <p className="text-[11px] font-bold text-black mt-1 z-10">Authorized Sign,</p>
+                {invoice.approved_by && (
+                  <p className="text-[11px] font-bold text-black mt-0.5 z-10">{invoice.approved_by}</p>
+                )}
               </div>
             </div>
 
@@ -380,7 +517,10 @@ export default function PrintModal({ invoice, isOpen, onClose, onPrintConfirmed 
             </div>
           </div>
         </div>
+            );
+          })}
       </div>
     </div>
-  );
+    </div>
+  ), portalTarget);
 }

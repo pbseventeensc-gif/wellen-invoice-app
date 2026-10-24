@@ -1,765 +1,1060 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  AlertTriangle, 
-  Clock, 
-  XCircle, 
-  Edit3, 
-  FilePlus, 
-  Trash2, 
-  Search, 
+import {
   ArrowUpDown,
+  BadgeCheck,
   Check,
-  Info,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
+  ChevronDown,
+  Clock3,
+  Download,
+  FilePlus2,
+  Layers3,
+  Pencil,
+  Printer,
+  Search,
   X,
-  Filter,
-  ChevronsUpDown,
-  ShieldCheck
 } from 'lucide-react';
-import { formatRupiah } from '@/utils/taxCalculator';
+import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
+import { normalizeRole } from '@/config/permissions';
+import {
+  approveInvoiceWorkflow,
+  listInvoiceWorkflows,
+  markInvoiceWorkflowPrinted,
+} from '@/utils/invoiceWorkflow';
+import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
+import PrintModal from '@/components/invoice-print/PrintModal';
+import TablePagination from '@/components/ui/TablePagination';
+import {
+  getUnreadStatusCounts,
+  markInvoiceStatusSeen,
+  saveUnreadStatusCounts,
+} from '@/utils/invoiceNotifications';
+
+const STAGING_KEY = 'wellen_wpp_staging';
+
+function readList(key) {
+  const value = JSON.parse(localStorage.getItem(key) || '[]');
+  if (!Array.isArray(value)) throw new Error(`${key} must contain an array.`);
+  return value;
+}
+
+function getMonthYear(row) {
+  if (row.month_year) return String(row.month_year).slice(0, 7);
+  const date = row.import_date || row.invoice_date || row.time_created || row.time_approved;
+  return date ? String(date).slice(0, 7) : '';
+}
+
+function toInvoiceRow(row, status, id, invoiceNo) {
+  const transactionLines = Array.from(new Map((row.items || [])
+    .map((item) => ({
+      no_wpp: item.source_no_wpp || item.wpp_number || item.no_faktur || '',
+      store_name: String(item.store_name || item.item_description || '').trim(),
+    }))
+    .filter((item) => item.no_wpp || item.store_name)
+    .map((item, index) => [`${item.no_wpp}-${item.store_name}`, { ...item, id: `${item.no_wpp}-${item.store_name}-${index}` }])
+  ).values());
+  const sourceWppNumbers = Array.from(new Set(transactionLines.map((item) => item.no_wpp).filter(Boolean)));
+  const storeNames = Array.from(new Set(transactionLines.map((item) => item.store_name).filter(Boolean)));
+  const noWpp = row.no_wpp || sourceWppNumbers.join(', ') || row.wpp_number || row.no_faktur || row.invoice_number || '';
+  const noWppLines = String(noWpp).split(/\s*,\s*/).filter(Boolean);
+  const storeNameLines = storeNames.length ? storeNames : String(row.store_name || '').split(/\s*,\s*/).filter(Boolean);
+  const alignedLines = noWppLines.map((number, index) => ({
+    no_wpp: number,
+    store_name: transactionLines[index]?.store_name || storeNameLines[index] || '',
+  }));
+  return {
+    ...row,
+    id,
+    invoice_no: invoiceNo || row.invoice_no || row.invoice_number || '',
+    status,
+    no_wpp: noWpp,
+    transaction_lines: alignedLines,
+    client_name: row.client_name || row.customer || '-',
+    store_name: storeNameLines.join(', ') || '-',
+    created_by: row.created_by || row.ar_name || '',
+    approved_by: row.approved_by || row.approver_name || '',
+    import_date: row.import_date || row.invoice_date || row.time_created || '',
+    month_year: getMonthYear(row),
+    created_invoice_at: row.created_invoice_at || row.time_created || '',
+    approved_at: row.approved_at || row.time_approved || '',
+    grand_total: Number(row.grand_total ?? row.total_price ?? row.total_faktur ?? row.nilai_wpp ?? 0),
+  };
+}
+
+function getAllRows(workflows) {
+  const staging = readList(STAGING_KEY);
+  const rows = [];
+  const activeItemIds = new Set();
+  const activeSourceNumbers = new Set();
+
+  workflows.filter((invoice) => invoice.status === 'waiting_approval').forEach((invoice) => {
+    (invoice.items || []).forEach((item) => {
+      if (item.id) activeItemIds.add(item.id);
+      [item.source_no_wpp, item.wpp_number, item.no_faktur].forEach((number) => {
+        const normalizedNumber = String(number || '').trim().toLowerCase();
+        if (normalizedNumber) activeSourceNumbers.add(normalizedNumber);
+      });
+    });
+    rows.push(toInvoiceRow(invoice, 'Invoiced', invoice.id, invoice.invoice_number));
+  });
+  workflows.filter((invoice) => invoice.status === 'approved').forEach((invoice) => {
+    (invoice.items || []).forEach((item) => {
+      if (item.id) activeItemIds.add(item.id);
+      [item.source_no_wpp, item.wpp_number, item.no_faktur].forEach((number) => {
+        const normalizedNumber = String(number || '').trim().toLowerCase();
+        if (normalizedNumber) activeSourceNumbers.add(normalizedNumber);
+      });
+    });
+    rows.push(toInvoiceRow(invoice, 'Approved', invoice.id, invoice.invoice_number));
+  });
+
+  staging.forEach((item) => {
+    const sourceNumbers = [item.source_no_wpp, item.wpp_number, item.no_faktur]
+      .map((number) => String(number || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (activeItemIds.has(item.id) || sourceNumbers.some((number) => activeSourceNumbers.has(number))) return;
+    const sourceStatus = String(item.status || '').toLowerCase();
+    const status = sourceStatus === 'rejected'
+      ? 'Rejected'
+      : 'Draft';
+    rows.push(toInvoiceRow(item, status, item.id, item.invoice_no || item.invoice_number));
+  });
+
+  return Array.from(new Map(rows.map((row) => [row.id || `${row.invoice_no}-${row.no_wpp}`, row])).values())
+    .sort((a, b) => String(b.import_date).localeCompare(String(a.import_date)));
+}
+
+function displayDate(value, includeTime = false) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('id-ID', includeTime
+    ? { dateStyle: 'medium', timeStyle: 'short' }
+    : { dateStyle: 'medium' }
+  ).format(date);
+}
+
+function getCurrentMonthDateRange() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+  return {
+    from: `${year}-${month}-01`,
+    to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+function InvoiceFilterDropdown({ label, value, options, onChange, widthClass = 'min-w-[150px]' }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const selectedOption = options.find((option) => option.value === value) || options[0];
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative flex flex-col gap-1 text-[11px] font-medium text-slate-500">
+      <span>{label}</span>
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className={`inline-flex h-9 ${widthClass} items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs font-normal text-slate-700 transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-100`}
+      >
+        <span className="truncate">{selectedOption?.label}</span>
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div
+          role="listbox"
+          aria-label={label}
+          className="absolute left-0 top-full z-30 mt-2 w-max min-w-full max-w-[min(22rem,90vw)] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
+                  isSelected
+                    ? 'bg-amber-50 font-semibold text-amber-800'
+                    : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span className="flex-1 whitespace-nowrap">{option.label}</span>
+                {isSelected && <Check size={16} className="shrink-0 text-amber-600" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InvoiceListPage() {
   const router = useRouter();
-
-  // Guard untuk mencegah Hydration Error (#418) antara SSR dan browser Client
-  const [mounted, setMounted] = useState(false);
-  const [items, setItems] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [rows, setRows] = useState([]);
+  const [role, setRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Tooltip & Sorting
-  const [activeReasonId, setActiveReasonId] = useState(null);
-  const [sortField, setSortField] = useState('import_date');
+  const pageSize = 8;
+  const initialDateRange = getCurrentMonthDateRange();
+  const [fromDate, setFromDate] = useState(initialDateRange.from);
+  const [toDate, setToDate] = useState(initialDateRange.to);
+  const [sortBy, setSortBy] = useState('import_date');
   const [sortDirection, setSortDirection] = useState('desc');
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedDraftIds, setSelectedDraftIds] = useState([]);
+  const [selectedPrintIds, setSelectedPrintIds] = useState([]);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [pendingApproval, setPendingApproval] = useState(null);
 
-  const loadData = () => {
+  const loadRows = async () => {
     try {
-      const approvedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-
-      const approvedItemIdsSet = new Set();
-      const approvedFaktursSet = new Set();
-      approvedInvoices.forEach((inv) => {
-        inv.items?.forEach((it) => {
-          if (it.id) approvedItemIdsSet.add(it.id);
-          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-          if (f) approvedFaktursSet.add(f);
-        });
+      const workflows = await listInvoiceWorkflows();
+      const nextRows = getAllRows(workflows);
+      setRows(nextRows);
+      saveUnreadStatusCounts(getUnreadStatusCounts(nextRows));
+    } catch (error) {
+      console.error('Failed to load invoice list:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Invoices could not be loaded',
+        description: 'The shared invoice workflow could not be reached. Check your connection and Supabase access, then try again.',
       });
-
-      const waitingItemIdsSet = new Set();
-      const waitingFaktursSet = new Set();
-      approvalQueue.forEach((q) => {
-        q.items?.forEach((it) => {
-          if (it.id) waitingItemIdsSet.add(it.id);
-          const f = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-          if (f) waitingFaktursSet.add(f);
-        });
-      });
-
-      let rawStaging = JSON.parse(
-        localStorage.getItem('wellen_wpp_staging') ||
-        localStorage.getItem('wellen_imported_wpp') ||
-        '[]'
-      );
-
-      // Bersihkan sampel lama jika ada
-      const cleanedStaging = rawStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-'));
-      if (cleanedStaging.length !== rawStaging.length) {
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(cleanedStaging));
-        rawStaging = cleanedStaging;
-      }
-
-      const activePendingItems = rawStaging.filter((it) => {
-        const itemId = it.id;
-        const itemFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-
-        const isApproved = approvedItemIdsSet.has(itemId) || (itemFaktur && approvedFaktursSet.has(itemFaktur));
-        const isWaiting = waitingItemIdsSet.has(itemId) || (itemFaktur && waitingFaktursSet.has(itemFaktur)) || it.status === 'waiting_approval' || it.status === 'waiting';
-        const isInvoiced = it.status === 'invoiced';
-
-        return !isApproved && !isWaiting && !isInvoiced;
-      });
-
-      setItems(activePendingItems);
-    } catch (e) {
-      console.error('Failed to read invoice list data:', e);
+      setRows([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    setMounted(true);
-    loadData();
-    window.addEventListener('storage', loadData);
-    return () => window.removeEventListener('storage', loadData);
+    let isMounted = true;
+    const loadRole = async () => {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('Failed to load invoice-list permissions:', authError);
+        return;
+      }
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) {
+        console.error('Failed to load invoice-list permissions:', error);
+        return;
+      }
+      if (isMounted) {
+        setRole(normalizeRole(data?.role));
+      }
+    };
+    const loadTimer = window.setTimeout(loadRows, 0);
+    loadRole();
+    window.addEventListener('storage', loadRows);
+    window.addEventListener('wellen-invoice-workflows', loadRows);
+    window.addEventListener('focus', loadRows);
+    return () => {
+      isMounted = false;
+      window.clearTimeout(loadTimer);
+      window.removeEventListener('storage', loadRows);
+      window.removeEventListener('wellen-invoice-workflows', loadRows);
+      window.removeEventListener('focus', loadRows);
+    };
   }, []);
 
-  const getDaysDifference = (importedAtStr) => {
-    if (!importedAtStr) return 0;
-    const importedTime = new Date(importedAtStr).getTime();
-    if (isNaN(importedTime)) return 0;
-    const now = new Date().getTime();
-    const diffDays = Math.floor((now - importedTime) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diffDays);
-  };
-
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const filteredItems = useMemo(() => {
-    return items.filter((it) => {
-      const dateStr = it.waktu_import || it.imported_at || it.import_date;
-      const daysOld = getDaysDifference(dateStr);
-
-      const term = searchTerm.toLowerCase();
-      const matchSearch =
-        (it.wpp_number || it.no_faktur || '').toLowerCase().includes(term) ||
-        (it.client_name || '').toLowerCase().includes(term) ||
-        (it.item_description || it.store_name || '').toLowerCase().includes(term);
-
-      const normalizedStatus = (it.status === 'draft' || it.status === 'ready' || it.status === 'ready_to_process' || !it.status) ? 'ready' : it.status;
-      const isWaiting = normalizedStatus === 'waiting' || normalizedStatus === 'waiting_approval';
-      const isSlaBreached = isWaiting && daysOld >= 3;
-
-      let matchStatus = false;
-      if (statusFilter === 'ALL') matchStatus = true;
-      else if (statusFilter === 'ready') matchStatus = normalizedStatus === 'ready';
-      else if (statusFilter === 'waiting') matchStatus = isWaiting;
-      else if (statusFilter === 'rejected') matchStatus = normalizedStatus === 'rejected';
-      else if (statusFilter === 'sla_overdue') matchStatus = isSlaBreached;
-
-      return matchSearch && matchStatus;
-    }).sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-
-      if (sortField === 'import_date') {
-        valA = a.import_date || a.imported_at || a.waktu_import || '';
-        valB = b.import_date || b.imported_at || b.waktu_import || '';
-      } else if (sortField === 'total_price') {
-        valA = Number(a.total_price || a.nilai_wpp || 0);
-        valB = Number(b.total_price || b.nilai_wpp || 0);
-      } else {
-        valA = String(valA || '').toLowerCase();
-        valB = String(valB || '').toLowerCase();
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setSelectedInvoice(null);
       }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, []);
 
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [items, searchTerm, statusFilter, sortField, sortDirection]);
-
-  const statusCounts = useMemo(() => {
-    let ready = 0, waiting = 0, rejected = 0, slaBreached = 0;
-    items.forEach((it) => {
-      const dateStr = it.waktu_import || it.imported_at || it.import_date;
-      const daysOld = getDaysDifference(dateStr);
-      const isWaiting = it.status === 'waiting' || it.status === 'waiting_approval';
-      const isRejected = it.status === 'rejected';
-
-      if (isWaiting && daysOld >= 3) slaBreached += 1;
-      if (isRejected) rejected += 1;
-      else if (isWaiting) waiting += 1;
-      else ready += 1;
-    });
-    return { all: items.length, ready, waiting, rejected, slaBreached };
-  }, [items]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, currentPage, pageSize]);
-
-  const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) return;
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} selected items?`)) {
-      const nextItems = items.filter((it) => !selectedIds.includes(it.id));
-      setItems(nextItems);
-      setSelectedIds([]);
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(nextItems));
-      localStorage.setItem('wellen_imported_wpp', JSON.stringify(nextItems));
-      window.dispatchEvent(new Event('storage'));
+  const clients = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.client_name).filter((client) => client && client !== '-'))).sort(),
+    [rows]
+  );
+  const matchingRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return rows
+      .filter((row) => {
+        const matchesSearch = !query || [row.invoice_no, row.no_wpp, row.client_name, row.store_name]
+          .some((value) => String(value || '').toLowerCase().includes(query));
+        const matchesClient = clientFilter === 'ALL' || row.client_name === clientFilter;
+        const date = String(row.import_date || '').slice(0, 10);
+        const matchesFrom = !fromDate || date >= fromDate;
+        const matchesTo = !toDate || date <= toDate;
+        return matchesSearch && matchesClient && matchesFrom && matchesTo;
+      })
+  }, [rows, search, clientFilter, fromDate, toDate]);
+  const filteredRows = useMemo(() => {
+    return matchingRows
+      .filter((row) => statusFilter === 'ALL' || row.status === statusFilter)
+      .sort((a, b) => {
+        const getValue = (row) => {
+          if (sortBy === 'created_invoice_at') return row.created_invoice_at || '';
+          if (sortBy === 'invoice_no') return row.invoice_no || '';
+          if (sortBy === 'client_name') return row.client_name || '';
+          if (sortBy === 'grand_total') return row.grand_total;
+          return row.import_date || '';
+        };
+        const valueA = getValue(a);
+        const valueB = getValue(b);
+        const comparison = typeof valueA === 'number' && typeof valueB === 'number'
+          ? valueA - valueB
+          : String(valueA).localeCompare(String(valueB), 'id', { numeric: true, sensitivity: 'base' });
+        return sortDirection === 'desc' ? -comparison : comparison;
+      });
+  }, [matchingRows, statusFilter, sortBy, sortDirection]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const visiblePage = Math.min(currentPage, totalPages);
+  const paginatedRows = filteredRows.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
+  const printableRows = filteredRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
+  const draftRows = filteredRows.filter((row) => row.status === 'Draft');
+  const selectedDraftRows = rows.filter((row) => row.status === 'Draft' && selectedDraftIds.includes(row.id));
+  const handleDraftGrandTotalChange = (rowId, value) => {
+    const grandTotal = parseCurrencyNumber(value);
+    const breakdown = calculateFakturBreakdown(grandTotal);
+    try {
+      const staging = readList(STAGING_KEY);
+      const updatedStaging = staging.map((item) => item.id === rowId
+        ? {
+            ...item,
+            grand_total: grandTotal,
+            raw_total: grandTotal,
+            total_faktur: grandTotal,
+            total_price: grandTotal,
+            nilai_wpp: grandTotal,
+            unit_price: grandTotal,
+            dpp: breakdown.dpp,
+            nilai_barang: breakdown.nilaiBarang,
+            nilaiBarang: breakdown.nilaiBarang,
+            jasa_cetak: breakdown.jasaCetak,
+            jasaCetak: breakdown.jasaCetak,
+            pph23: breakdown.pph23,
+            wht: breakdown.wht,
+            dpp_nilai_lain_barang: breakdown.dppNilaiLainBarang,
+            dpp_nilai_lain_jasa_cetak: breakdown.dppNilaiLainJasaCetak,
+            ppn: breakdown.ppn,
+            updated_at: new Date().toISOString(),
+          }
+        : item
+      );
+      localStorage.setItem(STAGING_KEY, JSON.stringify(updatedStaging));
+      localStorage.setItem('wellen_imported_wpp', JSON.stringify(updatedStaging));
+      loadRows();
+    } catch (error) {
+      console.error('Failed to update draft grand total:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Grand total could not be saved',
+        description: 'The draft amount was not saved. Check browser storage and try again.',
+      });
     }
   };
-
-  const handleToggleSelect = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleToggleSelectAll = () => {
-    const allPaginatedSelected = paginatedItems.length > 0 && paginatedItems.every((r) => selectedIds.includes(r.id));
-
-    if (allPaginatedSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !paginatedItems.some((r) => r.id === id)));
-    } else {
-      const idsToAdd = paginatedItems.map((r) => r.id);
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...idsToAdd])));
-    }
-  };
-
-  const handleProceedSelected = () => {
-    const selectedRows = items.filter((r) => selectedIds.includes(r.id));
-    const processableRows = selectedRows.filter((r) => r.status !== 'waiting' && r.status !== 'waiting_approval');
-
-    if (processableRows.length === 0) {
-      alert('Selected items are currently in review (Waiting Approval). Only items that are Ready to Invoice or Rejected can be processed into a new invoice draft.');
+  const handleCreateInvoiceFromDrafts = () => {
+    if (selectedDraftRows.length === 0) {
+      setFeedback({
+        variant: 'error',
+        title: 'No Draft selected',
+        description: 'Select at least one Draft row from the Invoices list to start creating an invoice.',
+      });
       return;
     }
-
-    const stagedItems = processableRows.map((item) => ({
-      id: item.id,
-      wpp_number: item.wpp_number || item.no_faktur,
-      no_faktur: item.no_faktur || item.wpp_number,
-      item_description: item.item_description || item.store_name,
-      store_name: item.store_name || item.item_description,
-      total_price: item.total_price || item.nilai_wpp,
-      unit_price: item.unit_price || item.total_price || item.nilai_wpp,
-      qty: item.qty || 1,
-      client_name: item.client_name,
-      promo_name: item.promo_name || item.item_description,
-      invoice_date: item.invoice_date || item.import_date || item.date || '',
+    const stagedItems = selectedDraftRows.map((row) => ({
+      ...row,
+      no_faktur: row.no_faktur || row.wpp_number || row.no_wpp,
+      wpp_number: row.wpp_number || row.no_faktur || row.no_wpp,
+      item_description: row.item_description || row.store_name,
+      store_name: row.store_name || row.item_description,
+      total_faktur: Number(row.grand_total ?? row.total_faktur ?? row.total_price ?? 0),
+      total_price: Number(row.grand_total ?? row.total_price ?? row.total_faktur ?? 0),
+      status: 'draft',
     }));
+    try {
+      sessionStorage.setItem('wellen_import_source', 'excel');
+      sessionStorage.setItem('wellen_staged_items', JSON.stringify(stagedItems));
+      router.push('/create-invoice');
+    } catch (error) {
+      console.error('Failed to prepare selected drafts for invoice creation:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Create Invoice could not be opened',
+        description: 'The selected draft data could not be prepared. Please try again.',
+      });
+    }
+  };
+  const selectedPrintInvoices = printableRows.filter((row) => selectedPrintIds.includes(row.id));
+  const visiblePrintableRows = paginatedRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
+  const visibleDraftRows = paginatedRows.filter((row) => row.status === 'Draft');
+  const allActionableSelected = visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id))
+    && visibleDraftRows.every((row) => selectedDraftIds.includes(row.id))
+    && visiblePrintableRows.length + visibleDraftRows.length > 0;
 
-    const isPo = processableRows.some((item) => Boolean(item.uom && item.uom !== 'PCS') || item.isPoSource);
-    sessionStorage.setItem('wellen_import_source', isPo ? 'po' : 'excel');
-    sessionStorage.setItem('wellen_staged_items', JSON.stringify(stagedItems));
-    router.push('/create-invoice');
+  const handleApprove = (invoice) => {
+    setPendingApproval(invoice);
+    setFeedback({
+      variant: 'confirm',
+      title: 'Approve this invoice?',
+      description: `${invoice.invoice_no || invoice.no_wpp} will be marked as approved and removed from the AR queue.`,
+      confirmLabel: 'Approve invoice',
+    });
   };
 
-  const handleDelete = (id) => {
-    if (confirm('Delete this item from the invoice list?')) {
-      const nextItems = items.filter((it) => it.id !== id);
-      setItems(nextItems);
-      setSelectedIds((prev) => prev.filter((itemId) => itemId !== id));
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(nextItems));
-      localStorage.setItem('wellen_imported_wpp', JSON.stringify(nextItems));
-      window.dispatchEvent(new Event('storage'));
+  const confirmApproval = async () => {
+    const invoice = pendingApproval;
+    setFeedback(null);
+    setPendingApproval(null);
+    if (!invoice) return;
+    try {
+      await approveInvoiceWorkflow(invoice.id);
+      const approvedAt = new Date().toISOString();
+      const approvedItemIds = new Set((invoice.items || []).map((item) => item.id).filter(Boolean));
+      const approvedSourceNumbers = new Set((invoice.items || [])
+        .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
+        .map((number) => String(number || '').trim().toLowerCase())
+        .filter(Boolean));
+      const staging = readList(STAGING_KEY).map((item) =>
+        approvedItemIds.has(item.id) || [item.source_no_wpp, item.wpp_number, item.no_faktur]
+          .some((number) => approvedSourceNumbers.has(String(number || '').trim().toLowerCase()))
+          ? { ...item, status: 'approved', approved_at: approvedAt, updated_at: approvedAt }
+          : item
+      );
+      localStorage.setItem(STAGING_KEY, JSON.stringify(staging));
+      localStorage.setItem('wellen_imported_wpp', JSON.stringify(staging));
+      window.dispatchEvent(new Event('wellen-invoice-workflows'));
+      markInvoiceStatusSeen('Approved');
+      loadRows();
+      setSelectedInvoice(null);
+      setFeedback({
+        variant: 'success',
+        title: 'Invoice approved',
+        description: `${invoice.invoice_no || invoice.no_wpp} has been approved successfully.`,
+      });
+    } catch (error) {
+      console.error('Failed to approve invoice:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Approval could not be completed',
+        description: 'No success was recorded. Please try again or contact an administrator.',
+      });
     }
   };
 
-  const handleProceedToCreate = (item) => {
-    const isPo = Boolean(item.uom && item.uom !== 'PCS') || item.isPoSource === true;
-    const stagedItem = [
-      {
-        id: item.id,
-        wpp_number: item.wpp_number || item.no_faktur,
-        no_faktur: item.no_faktur || item.wpp_number,
-        item_description: item.item_description || item.store_name,
-        store_name: item.store_name || item.item_description,
-        total_price: item.total_price || item.nilai_wpp,
-        unit_price: item.unit_price || item.total_price || item.nilai_wpp,
-        qty: item.qty || 1,
-        uom: item.uom || 'PCS',
-        client_name: item.client_name,
-        promo_name: item.promo_name || item.item_description,
-        invoice_date: item.invoice_date || item.import_date || item.date || '',
-      },
-    ];
-
-    sessionStorage.setItem('wellen_import_source', isPo ? 'po' : 'excel');
-    sessionStorage.setItem('wellen_staged_items', JSON.stringify(stagedItem));
-    router.push('/create-invoice');
+  const exportToExcel = () => {
+    const data = filteredRows.map((row) => ({
+      'No Invoice': row.invoice_no || '-',
+      Status: row.status,
+      'No WPP': row.no_wpp,
+      'Klien / Customer': row.client_name,
+      'Store Name': row.store_name,
+      'Created By': row.created_by || '-',
+      'Approved By': row.approved_by || '-',
+      'Tanggal Import': row.import_date,
+      'Bulan & Tahun': row.month_year,
+      'Timestamp Queue AR': row.created_invoice_at,
+      'Timestamp Approved': row.approved_at,
+      'Grand Total': row.grand_total,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Invoices');
+    XLSX.writeFile(workbook, 'wellen-invoices.xlsx');
   };
 
-  const isAllSelected = paginatedItems.length > 0 && paginatedItems.every((r) => selectedIds.includes(r.id));
-
-  // Tampilkan skeleton saat render pertama di server untuk menghindari hydration mismatch
-  if (!mounted) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-6 pb-24 p-6">
-        <div className="h-8 w-64 bg-stone-100 rounded-lg animate-pulse" />
-        <div className="h-20 bg-stone-50 border border-stone-200/80 rounded-2xl animate-pulse" />
-        <div className="h-96 bg-white border border-stone-200/80 rounded-2xl animate-pulse" />
-      </div>
-    );
-  }
-
+  const canApprove = role === 'approval' || role === 'super admin';
+  const statusOptions = [
+    { value: 'ALL', label: 'All statuses' },
+    { value: 'Invoiced', label: 'Invoiced' },
+    { value: 'Draft', label: 'Draft' },
+    { value: 'Approved', label: 'Approved' },
+    { value: 'Rejected', label: 'Rejected' },
+  ];
+  const sortOptions = [
+    { value: 'import_date:desc', label: 'Newest created' },
+    { value: 'import_date:asc', label: 'Oldest created' },
+    { value: 'created_invoice_at:desc', label: 'Newest invoice' },
+    { value: 'client_name:asc', label: 'Customer A-Z' },
+    { value: 'grand_total:desc', label: 'Grand total high to low' },
+  ];
+  const currentSortOption = `${sortBy}:${sortDirection}`;
+  const invoiceCards = [
+    { value: 'ALL', label: 'All records', icon: Layers3, color: 'text-slate-700', iconStyle: 'bg-slate-100 text-slate-600', count: matchingRows.length },
+    { value: 'Draft', label: 'Draft', icon: Clock3, color: 'text-orange-800', iconStyle: 'bg-orange-50 text-orange-700', count: matchingRows.filter((row) => row.status === 'Draft').length },
+    { value: 'Invoiced', label: 'Invoiced', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length },
+    { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length },
+  ];
+  const markStatusSeen = (status) => {
+    markInvoiceStatusSeen(status);
+    saveUnreadStatusCounts(getUnreadStatusCounts(rows));
+  };
+  const openInvoiceDetails = (invoice) => {
+    setSelectedInvoice(invoice);
+    markStatusSeen(invoice.status);
+  };
+  const periodLabel = fromDate && toDate && fromDate.slice(0, 7) === toDate.slice(0, 7)
+    ? new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' })
+      .format(new Date(`${fromDate}T12:00:00`))
+    : fromDate || toDate
+      ? `${fromDate ? displayDate(fromDate) : 'Any date'} – ${toDate ? displayDate(toDate) : 'Any date'}`
+      : 'All dates';
+  const selectStatus = (status) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+    if (status !== 'ALL') markStatusSeen(status);
+  };
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-24">
-      {/* Header Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
+    <div className="mx-auto max-w-[1500px] space-y-5 pb-20">
+      <header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoice List & Staged Queue</h1>
-          <p className="text-xs text-stone-500 mt-1 font-normal">
-            List of imported WPP data pending final invoice generation, approval status, and SLA tracking.
-          </p>
+          <p className="text-xs font-medium text-slate-400">Sales <span className="px-1">›</span> Finance</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Invoices</h1>
         </div>
-      </div>
-
-      {/* Info Bar SLA Rules */}
-      <div className="bg-stone-50 border border-stone-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-stone-700">
-        <ShieldCheck size={18} className="text-stone-500 shrink-0 mt-0.5" />
-        <div className="space-y-0.5 text-[11px] leading-relaxed">
-          <p className="font-semibold text-stone-900 text-xs">SLA Rules & Retention Policy:</p>
-          <p className="text-stone-500 font-normal">
-            • <span className="text-stone-800 font-medium">Waiting Approval</span> status exceeding <strong className="text-stone-900">3 days</strong> triggers SLA Overdue warning.
-            <br />
-            • Filter and process large datasets easily with page size options (10 / 25 / 50 data per page) and bulk checkboxes.
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedDraftRows.length > 0 && (
+            <button
+              type="button"
+              onClick={handleCreateInvoiceFromDrafts}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+            >
+              <FilePlus2 size={14} />
+              Create Invoice ({selectedDraftRows.length})
+            </button>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* Clean Floating Bulk Action Bar */}
-      {selectedIds.length > 0 && (
-        <div className="bg-white text-stone-900 p-3.5 px-5 rounded-2xl shadow-xl flex flex-wrap items-center justify-between gap-3 border border-stone-200 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-lg bg-stone-100 border border-stone-200 text-stone-700 flex items-center justify-center font-mono text-xs font-bold">
-              ✓
-            </div>
+      <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        {invoiceCards.map((card) => {
+          const Icon = card.icon;
+          const isActive = statusFilter === card.value;
+          return (
+            <button
+              key={card.value}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => selectStatus(card.value)}
+              className={`rounded-xl border bg-white p-3 text-left shadow-[0_2px_6px_rgba(15,23,42,0.04)] transition ${
+                isActive ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200/80 hover:border-slate-300'
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-slate-500">{card.label}</span>
+                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${card.iconStyle}`}>
+                  <Icon size={16} />
+                </span>
+              </span>
+              <span className={`mt-1.5 block text-2xl font-semibold tracking-tight ${card.color}`}>{card.count}</span>
+            </button>
+          );
+        })}
+      </section>
+
+      <section className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
+        <div className="border-b border-slate-200 px-4 py-3.5 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold text-stone-900">
-                {selectedIds.length} Terpilih
-              </p>
-              <p className="text-[10px] text-stone-500 font-normal">
-                Pilih tindakan massal yang ingin dilakukan.
+              <p className="text-sm font-semibold text-slate-900">Invoices</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {periodLabel}<span className="px-1.5">·</span>{filteredRows.length} invoices
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedPrintInvoices.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <Printer size={14} />
+                  Print Selected ({selectedPrintInvoices.length})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={exportToExcel}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <Download size={14} />
+                Export {filteredRows.length} rows
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleProceedSelected}
-              className="inline-flex items-center gap-1.5 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold px-4 py-2 rounded-xl text-xs shadow-2xs transition cursor-pointer"
-            >
-              <FilePlus size={14} />
-              Process ({selectedIds.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold px-3.5 py-2 rounded-xl text-xs transition cursor-pointer"
-            >
-              <Trash2 size={14} />
-              Delete ({selectedIds.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedIds([])}
-              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100 transition cursor-pointer"
-              title="Batal Pilihan"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs flex flex-wrap gap-3 items-center justify-between">
-        <div className="relative flex-1 min-w-[280px]">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-          <input
-            id="invoice-search"
-            name="invoiceSearch"
-            aria-label="Search WPP No., Client PT, or Description"
-            type="text"
-            placeholder="Search WPP No., Client PT, or Description..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full text-xs pl-9 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 placeholder:text-stone-400 font-normal"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
-            <Filter size={14} className="text-stone-400 shrink-0" />
-            <select
-              id="invoice-status-filter"
-              name="statusFilter"
-              aria-label="Filter status invoice"
+          <div className="mt-3 flex flex-wrap items-end gap-2.5">
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-500">
+              From
+              <input
+                type="date"
+                aria-label="Import date from"
+                value={fromDate}
+                onChange={(event) => {
+                  setFromDate(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-700 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-500">
+              To
+              <input
+                type="date"
+                aria-label="Import date to"
+                value={toDate}
+                onChange={(event) => {
+                  setToDate(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-700 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+              />
+            </label>
+            <InvoiceFilterDropdown
+              label="Customer group"
+              value={clientFilter}
+              options={[
+                { value: 'ALL', label: 'All customers' },
+                ...clients.map((client) => ({ value: client, label: client })),
+              ]}
+              onChange={(client) => {
+                setClientFilter(client);
+                setCurrentPage(1);
+              }}
+              widthClass="min-w-[150px]"
+            />
+            <InvoiceFilterDropdown
+              label="Status"
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
+              options={statusOptions}
+              onChange={selectStatus}
+              widthClass="min-w-[125px]"
+            />
+            <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-500">
+              Search
+              <span className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  aria-label="Search invoice, WPP or customer"
+                  placeholder="Invoice, WPP, customer..."
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="h-9 w-[220px] rounded-lg border border-slate-200 bg-white pl-8 pr-2.5 text-xs font-normal text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                />
+              </span>
+            </label>
+            <InvoiceFilterDropdown
+              label="Sort by"
+              value={currentSortOption}
+              options={sortOptions}
+              onChange={(option) => {
+                const [field, direction] = option.split(':');
+                setSortBy(field);
+                setSortDirection(direction);
                 setCurrentPage(1);
               }}
-              className="bg-transparent focus:outline-none text-xs font-normal text-stone-700 cursor-pointer pr-4 appearance-none"
-            >
-              <option value="ALL">Semua Status ({statusCounts.all})</option>
-              <option value="ready">Ready to Process ({statusCounts.ready})</option>
-              <option value="waiting">Waiting Review ({statusCounts.waiting})</option>
-              <option value="rejected">Rejected ({statusCounts.rejected})</option>
-              <option value="sla_overdue">SLA Overdue ({statusCounts.slaBreached})</option>
-            </select>
-            <ChevronsUpDown size={13} className="text-stone-400 shrink-0 pointer-events-none absolute right-2.5" />
-          </div>
-
-          <div className="relative inline-flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-700 font-normal hover:bg-stone-100 transition cursor-pointer">
-            <span className="text-stone-400 text-[11px]">Tampilkan:</span>
-            <select
-              id="invoice-page-size"
-              name="pageSize"
-              aria-label="Jumlah item per halaman"
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
+              widthClass="min-w-[165px]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate('');
+                setToDate('');
                 setCurrentPage(1);
               }}
-              className="bg-transparent focus:outline-none text-xs font-normal text-stone-700 cursor-pointer pr-4 appearance-none"
+              className="h-9 rounded-lg px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-50"
             >
-              <option value={10}>10 per hal</option>
-              <option value={25}>25 per hal</option>
-              <option value={50}>50 per hal</option>
-            </select>
-            <ChevronsUpDown size={13} className="text-stone-400 shrink-0 pointer-events-none absolute right-2.5" />
+              All dates
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Tabel Invoices List */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto max-h-[580px] overflow-y-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="sticky top-0 z-20 bg-stone-100/95 backdrop-blur-xs text-stone-600 uppercase font-semibold text-[10px] border-b border-stone-200 tracking-wider shadow-2xs">
+        <div className="data-table-scroll">
+          <table className="data-table w-full min-w-[1480px] border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-[13px] text-slate-600">
               <tr>
-                <th className="py-3.5 px-3 text-center w-12 bg-stone-100/95">
-                  <button
-                    type="button"
-                    onClick={handleToggleSelectAll}
-                    className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors mx-auto cursor-pointer ${
-                      isAllSelected
-                        ? 'bg-stone-900 border-stone-900 text-white'
-                        : 'border-stone-300 hover:border-stone-400 bg-white'
-                    }`}
-                    title={isAllSelected ? 'Deselect all' : 'Select all rows on this page'}
-                  >
-                    {isAllSelected && <Check size={10} strokeWidth={3} />}
-                  </button>
+                <th className="w-10 px-3 py-3.5 text-center font-medium">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all Draft and printable invoices on this page"
+                    checked={allActionableSelected}
+                    disabled={visiblePrintableRows.length + visibleDraftRows.length === 0}
+                    onChange={(event) => {
+                      const visibleDraftIds = visibleDraftRows.map((row) => row.id);
+                      const visiblePrintableIds = visiblePrintableRows.map((row) => row.id);
+                      setSelectedDraftIds((current) => event.target.checked
+                        ? Array.from(new Set([...current, ...visibleDraftIds]))
+                        : current.filter((id) => !visibleDraftIds.includes(id)));
+                      setSelectedPrintIds((current) => event.target.checked
+                        ? Array.from(new Set([...current, ...visiblePrintableIds]))
+                        : current.filter((id) => !visiblePrintableIds.includes(id)));
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                  />
                 </th>
-
-                <th className="py-3.5 px-3 text-center w-12 font-semibold bg-stone-100/95">NO</th>
-                
-                <th 
-                  onClick={() => handleSort('import_date')}
-                  className="py-3.5 px-4 text-center w-36 font-semibold bg-stone-100/95 cursor-pointer hover:text-stone-950 transition-colors select-none"
+                <th className="px-3 py-3.5 font-medium">Number</th>
+                <th className="px-3 py-3.5 font-medium">Status</th>
+                <th className="px-3 py-3.5 font-medium">No WPP</th>
+                <th className="px-3 py-3.5 font-medium">Customer</th>
+                <th className="px-3 py-3.5 font-medium">Store Name</th>
+                <th className="px-3 py-3.5 font-medium">Created By</th>
+                <th className="px-3 py-3.5 font-medium">Approved By</th>
+                <th
+                  className="cursor-pointer px-3 py-3.5 font-medium"
+                  onClick={() => {
+                    setSortBy('import_date');
+                    setSortDirection((direction) => direction === 'desc' ? 'asc' : 'desc');
+                  }}
                 >
-                  <div className="inline-flex items-center gap-1">
-                    <span>IMPORT TIME</span>
-                    <ArrowUpDown size={12} className="text-stone-400" />
-                  </div>
+                  <span className="inline-flex items-center gap-1">Import Date <ArrowUpDown size={12} /></span>
                 </th>
-
-                <th 
-                  onClick={() => handleSort('wpp_number')}
-                  className="py-3.5 px-4 w-36 font-semibold bg-stone-100/95 cursor-pointer hover:text-stone-950 transition-colors select-none"
-                >
-                  <div className="inline-flex items-center gap-1">
-                    <span>WPP NO</span>
-                    <ArrowUpDown size={12} className="text-stone-400" />
-                  </div>
-                </th>
-
-                <th 
-                  onClick={() => handleSort('client_name')}
-                  className="py-3.5 px-4 font-semibold bg-stone-100/95 cursor-pointer hover:text-stone-950 transition-colors select-none"
-                >
-                  <div className="inline-flex items-center gap-1">
-                    <span>CLIENT & DESCRIPTION</span>
-                    <ArrowUpDown size={12} className="text-stone-400" />
-                  </div>
-                </th>
-
-                <th 
-                  onClick={() => handleSort('total_price')}
-                  className="py-3.5 px-4 text-right w-36 font-semibold bg-stone-100/95 cursor-pointer hover:text-stone-950 transition-colors select-none"
-                >
-                  <div className="inline-flex items-center justify-end gap-1">
-                    <span>WPP VALUE</span>
-                    <ArrowUpDown size={12} className="text-stone-400" />
-                  </div>
-                </th>
-
-                <th className="py-3.5 px-4 text-center w-40 font-semibold bg-stone-100/95">STATUS</th>
-                <th className="py-3.5 px-4 text-center w-40 font-semibold bg-stone-100/95">ALERT / RETENTION</th>
-                <th className="py-3.5 px-4 text-center w-32 font-semibold bg-stone-100/95">ACTION</th>
+                <th className="px-3 py-3.5 font-medium">Month / Year</th>
+                <th className="px-3 py-3.5 font-medium">AR Queue Timestamp</th>
+                <th className="px-3 py-3.5 font-medium">Approved Timestamp</th>
+                <th className="px-3 py-3.5 text-right font-medium">Total</th>
+                <th className="px-3 py-3.5 text-right font-medium">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-100 font-normal">
-              {paginatedItems.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-center py-12 text-stone-400 font-normal">
-                    No active WPP data in this queue.
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan={14} className="px-4 py-12 text-center text-slate-500">Loading invoices…</td></tr>
+              ) : filteredRows.length === 0 ? (
+                <tr><td colSpan={14} className="px-4 py-12 text-center text-slate-500">No invoices match these filters.</td></tr>
+              ) : paginatedRows.map((row) => (
+                <tr
+                  key={`${row.id}-${row.status}`}
+                  tabIndex={['Invoiced', 'Approved'].includes(row.status) ? 0 : -1}
+                  aria-label={['Invoiced', 'Approved'].includes(row.status) ? `Open ${row.status.toLowerCase()} invoice details` : undefined}
+                  onClick={() => {
+                    if (['Invoiced', 'Approved'].includes(row.status)) openInvoiceDetails(row);
+                  }}
+                  onKeyDown={(event) => {
+                    if (['Enter', ' '].includes(event.key) && ['Invoiced', 'Approved'].includes(row.status)) {
+                      event.preventDefault();
+                      openInvoiceDetails(row);
+                    }
+                  }}
+                  className={`transition-colors hover:bg-amber-50/50 ${
+                    ['Invoiced', 'Approved'].includes(row.status) ? 'cursor-pointer focus:bg-amber-50 focus:outline-none' : ''
+                  }`}
+                >
+                  <td className="px-3 py-3 text-center" onClick={(event) => event.stopPropagation()}>
+                    {row.status === 'Draft' ? (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select draft ${row.no_wpp} to create an invoice`}
+                        checked={selectedDraftIds.includes(row.id)}
+                        onChange={(event) => {
+                          setSelectedDraftIds((current) => event.target.checked
+                            ? [...current, row.id]
+                            : current.filter((id) => id !== row.id)
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                      />
+                    ) : ['Invoiced', 'Approved'].includes(row.status) && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select invoice ${row.invoice_no || row.no_wpp} for printing`}
+                        checked={selectedPrintIds.includes(row.id)}
+                        onChange={(event) => {
+                          setSelectedPrintIds((current) => event.target.checked
+                            ? [...current, row.id]
+                            : current.filter((id) => id !== row.id)
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                      />
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 font-mono font-medium text-slate-800">{row.invoice_no || '—'}</td>
+                  <td className="px-3 py-3">
+                    <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${
+                      row.status === 'Approved'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : row.status === 'Invoiced'
+                          ? 'bg-amber-100 text-amber-800'
+                          : row.status === 'Rejected'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-orange-50 text-orange-800'
+                    }`}>
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="w-44 min-w-44 px-3 py-3 font-mono text-slate-700">
+                    <span className="flex flex-col gap-y-0.5 leading-5">
+                      {(row.transaction_lines.length ? row.transaction_lines : [{ no_wpp: '—' }]).map((line, index) => (
+                        <span key={`${line.no_wpp}-${index}`} className="whitespace-nowrap">{line.no_wpp}</span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="max-w-52 truncate px-3 py-3 text-slate-700">{row.client_name}</td>
+                  <td className="max-w-56 px-3 py-3 text-slate-700" title={row.store_name}>
+                    <span className="flex flex-col gap-y-0.5 leading-5">
+                      {(row.transaction_lines.length ? row.transaction_lines : [{ store_name: row.store_name || '—' }]).map((line, index) => (
+                        <span key={`${line.no_wpp || 'store'}-${index}`} className="truncate">{line.store_name || '—'}</span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.created_by || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.approved_by || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.import_date)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.month_year || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.created_invoice_at, true)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.approved_at, true)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-medium text-slate-800">
+                    {row.status === 'Draft' ? (
+                      <label className="inline-flex items-center justify-end gap-1.5">
+                        <Pencil size={12} className="text-slate-400" />
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          aria-label={`Edit grand total for ${row.no_wpp}`}
+                          value={row.grand_total}
+                          onChange={(event) => handleDraftGrandTotalChange(row.id, event.target.value)}
+                          className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-right font-mono text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        />
+                      </label>
+                    ) : formatRupiah(row.grand_total)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {canApprove && row.status === 'Invoiced' && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleApprove(row);
+                        }}
+                        className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Approve
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ) : (
-                paginatedItems.map((row, idx) => {
-                  const globalIdx = (currentPage - 1) * pageSize + idx + 1;
-                  const dateStr = row.waktu_import || row.imported_at || row.import_date;
-                  const daysOld = getDaysDifference(dateStr);
-                  const isWaiting = row.status === 'waiting' || row.status === 'waiting_approval';
-                  const isSlaBreached = isWaiting && daysOld >= 3;
-                  const isDuplicate = row.isDuplicate === true;
-                  const isRejected = row.status === 'rejected';
-                  const isReady = row.status === 'ready' || row.status === 'draft' || row.status === 'ready_to_process' || !row.status;
-                  const isSelected = selectedIds.includes(row.id);
-                  const isReasonOpen = activeReasonId === row.id;
-
-                  return (
-                    <tr 
-                      key={row.id || idx} 
-                      className={`transition-colors font-normal relative ${
-                        isDuplicate 
-                          ? 'bg-rose-50/70 border-l-4 border-l-rose-500'
-                          : isSelected
-                          ? 'bg-stone-100/80'
-                          : 'hover:bg-stone-50/80'
-                      }`}
-                    >
-                      <td className="py-3.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSelect(row.id)}
-                          className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all mx-auto cursor-pointer ${
-                            isSelected
-                              ? 'bg-stone-900 border-stone-900 text-white shadow-2xs'
-                              : 'border-stone-300 hover:border-stone-400 bg-white'
-                          }`}
-                        >
-                          {isSelected && <Check size={10} strokeWidth={3} />}
-                        </button>
-                      </td>
-
-                      <td className="py-3.5 px-3 text-center text-stone-400 font-mono">{globalIdx}</td>
-                      
-                      <td className="py-3.5 px-4 text-center text-stone-600 font-mono text-[11px] whitespace-nowrap">
-                        {dateStr ? String(dateStr).slice(0, 10) : '-'}
-                      </td>
-
-                      <td className="py-3.5 px-4 font-mono text-stone-900 whitespace-nowrap font-normal">
-                        {row.wpp_number || row.no_faktur}
-                        {isDuplicate && (
-                          <span className="block text-[9px] text-rose-600 tracking-wider font-medium">
-                            DUPLICATE WPP!
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 max-w-sm">
-                        <p className="text-stone-900 truncate font-normal">{row.client_name}</p>
-                        <p className="text-[11px] text-stone-500 truncate mt-0.5">{row.item_description || row.store_name}</p>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right font-mono text-stone-900 font-normal whitespace-nowrap">
-                        {formatRupiah(row.total_price || row.nilai_wpp)}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap relative">
-                        {isReady && (
-                          <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 text-[10px] px-2.5 py-0.5 rounded-full border border-stone-200 font-normal">
-                            Ready to Invoice
-                          </span>
-                        )}
-                        {isWaiting && (
-                          <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 text-[10px] px-2.5 py-0.5 rounded-full border border-stone-300 font-normal">
-                            <Clock size={11} className="text-stone-400" /> Waiting Approval
-                          </span>
-                        )}
-                        {isRejected && (
-                          <div className="inline-flex items-center justify-center gap-1.5 relative">
-                            <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 text-[10px] px-2.5 py-0.5 rounded-full border border-stone-300 font-normal">
-                              <XCircle size={11} className="text-stone-500" /> Rejected
-                            </span>
-
-                            {row.reject_reason && (
-                              <div className="relative inline-block">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveReasonId(isReasonOpen ? null : row.id)}
-                                  className="w-5 h-5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-300 flex items-center justify-center transition-colors cursor-pointer"
-                                  title="Click to view rejection reason"
-                                >
-                                  <Info size={11} />
-                                </button>
-
-                                {isReasonOpen && (
-                                  <div className="absolute right-0 bottom-full mb-2 z-30 w-52 p-3 bg-stone-900 text-white rounded-2xl shadow-xl text-left normal-case tracking-normal space-y-1 border border-stone-800">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-[10px] font-semibold text-stone-300 uppercase tracking-wider">Rejection Reason</span>
-                                      <button 
-                                        onClick={() => setActiveReasonId(null)}
-                                        className="text-stone-400 hover:text-white text-xs cursor-pointer"
-                                      >
-                                        &times;
-                                      </button>
-                                    </div>
-                                    <p className="text-[11px] text-stone-200 leading-snug font-normal">
-                                      {row.reject_reason}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {isSlaBreached ? (
-                          <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-800 border border-stone-300 text-[10px] px-2.5 py-1 rounded-full font-normal">
-                            <AlertTriangle size={11} className="text-stone-500" /> Overdue (+{daysOld}d)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 border border-stone-200 text-[10px] px-2.5 py-1 rounded-full font-normal">
-                            <Clock size={11} className="text-stone-400" /> {Math.max(0, 7 - daysOld)}d Retention
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {isRejected ? (
-                            <button
-                              type="button"
-                              onClick={() => handleProceedToCreate(row)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
-                              title="Edit and Resubmit"
-                            >
-                              <Edit3 size={12} />
-                              Edit
-                            </button>
-                          ) : isReady ? (
-                            <button
-                              type="button"
-                              onClick={() => handleProceedToCreate(row)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
-                              title="Create New Invoice"
-                            >
-                              <FilePlus size={12} />
-                              Process
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-stone-100 text-stone-400 rounded-xl text-[10px] font-normal cursor-not-allowed"
-                              title="Under Review in Approval Queue"
-                            >
-                              <Clock size={12} />
-                              In Review
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(row.id)}
-                            className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer"
-                            title="Delete Item"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              ))}
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={visiblePage}
+          pageSize={pageSize}
+          totalItems={filteredRows.length}
+          onPageChange={(page) => setCurrentPage(Math.min(page, totalPages))}
+        />
+      </section>
 
-        {/* Pagination Bar */}
-        <div className="p-4 bg-stone-50/80 border-t border-stone-200/80 rounded-b-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-600">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="text-stone-500 font-medium">
-              Halaman <strong className="font-mono text-stone-900 font-normal">{currentPage}</strong> dari{' '}
-              <strong className="font-mono text-stone-900 font-normal">{totalPages}</strong>{' '}
-              <span className="text-stone-400 font-mono">({filteredItems.length} total data)</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(1)}
-              className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-              title="Halaman Pertama"
-            >
-              <ChevronsLeft size={15} />
-            </button>
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-              title="Halaman Sebelumnya"
-            >
-              <ChevronLeft size={15} />
-            </button>
-
-            <div className="flex items-center gap-1 px-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((page) => {
-                  return page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1;
-                })
-                .map((page, index, array) => {
-                  const showEllipsis = index > 0 && page - array[index - 1] > 1;
-                  return (
-                    <div key={page} className="flex items-center gap-1">
-                      {showEllipsis && <span className="px-1 text-stone-400 font-mono">...</span>}
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage(page)}
-                        className={`w-7 h-7 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-                          currentPage === page
-                            ? 'bg-stone-900 text-white shadow-2xs'
-                            : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-50'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    </div>
-                  );
-                })}
+      {selectedInvoice && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[1px]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedInvoice(null);
+          }}
+        >
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invoice-detail-title"
+            className="absolute inset-y-0 right-0 flex w-full max-w-[620px] animate-[drawer-in_240ms_cubic-bezier(0.2,0.8,0.2,1)] flex-col border-l border-slate-200 bg-white shadow-2xl"
+          >
+            <header className="border-b border-slate-200 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs text-slate-400">{selectedInvoice.invoice_no || 'Invoice details'}</p>
+                  <h2 id="invoice-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950">
+                    {selectedInvoice.client_name}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {String(selectedInvoice.no_wpp || '').split(/\s*,\s*/).filter(Boolean).length} POS transaction(s)
+                    <span className="px-1">·</span> Imported {displayDate(selectedInvoice.import_date)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close invoice details"
+                  onClick={() => setSelectedInvoice(null)}
+                  className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  selectedInvoice.status === 'Approved'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-700'
+                }`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {selectedInvoice.status}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {selectedInvoice.status === 'Approved' ? 'Approved' : 'In AR queue'}
+                </span>
+              </div>
+            </header>
+            <div className="flex-1 space-y-4 overflow-y-auto p-6">
+              <section className="rounded-xl border border-slate-200 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Invoice total</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                  {formatRupiah(selectedInvoice.grand_total)}
+                </p>
+              </section>
+              <section className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 p-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">No WPP</p>
+                  <div className="mt-1 flex flex-col gap-y-1 font-mono text-sm text-slate-800">
+                    {(selectedInvoice.transaction_lines.length
+                      ? selectedInvoice.transaction_lines
+                      : String(selectedInvoice.no_wpp || '—').split(/\s*,\s*/).filter(Boolean).map((number, index) => ({ no_wpp: number, id: index }))
+                    ).map((line, index) => (
+                      <span key={`${line.no_wpp}-${index}`}>{line.no_wpp}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Store Name</p>
+                  <div className="mt-1 flex flex-col gap-y-1 text-sm text-slate-800">
+                    {(selectedInvoice.transaction_lines.length
+                      ? selectedInvoice.transaction_lines
+                      : [{ store_name: selectedInvoice.store_name || '—' }]
+                    ).map((line, index) => (
+                      <span key={`${line.store_name || 'store'}-${index}`} className="break-words">{line.store_name || '—'}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Month / Year</p>
+                  <p className="mt-1 text-sm text-slate-800">{selectedInvoice.month_year || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">AR queue timestamp</p>
+                  <p className="mt-1 text-sm text-slate-800">{displayDate(selectedInvoice.created_invoice_at, true)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Approved timestamp</p>
+                  <p className="mt-1 text-sm text-slate-800">{displayDate(selectedInvoice.approved_at, true)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Created by</p>
+                  <p className="mt-1 text-sm text-slate-800">{selectedInvoice.created_by || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Approved by</p>
+                  <p className="mt-1 text-sm text-slate-800">{selectedInvoice.approved_by || '—'}</p>
+                </div>
+              </section>
+              {selectedInvoice.items?.length > 0 && (
+                <section className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="border-b border-slate-200 px-4 py-3">
+                    <h3 className="text-sm font-semibold text-slate-800">Invoice items</h3>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {selectedInvoice.items.map((item, index) => (
+                      <div key={item.id || `${item.source_no_wpp || item.wpp_number}-${index}`} className="flex items-start justify-between gap-4 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">
+                            {item.store_name || item.item_description || item.client_name || `Item ${index + 1}`}
+                          </p>
+                          <p className="mt-1 font-mono text-xs text-slate-500">
+                            {item.source_no_wpp || item.wpp_number || item.no_faktur || '—'}
+                          </p>
+                        </div>
+                        <p className="whitespace-nowrap text-sm font-medium text-slate-800">
+                          {formatRupiah(Number(item.total_price || item.total_faktur || item.nilai_wpp || 0))}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
-
-            <button
-              type="button"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-              title="Halaman Berikutnya"
-            >
-              <ChevronRight size={15} />
-            </button>
-            <button
-              type="button"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(totalPages)}
-              className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-              title="Halaman Terakhir"
-            >
-              <ChevronsRight size={15} />
-            </button>
-          </div>
+            {canApprove && selectedInvoice.status === 'Invoiced' && (
+              <footer className="border-t border-slate-200 p-5">
+                <button
+                  type="button"
+                  onClick={() => handleApprove(selectedInvoice)}
+                  className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-600"
+                >
+                  Approve invoice
+                </button>
+              </footer>
+            )}
+          </aside>
+          <style jsx>{`
+            @keyframes drawer-in {
+              from { opacity: 0; transform: translateX(24px); }
+              to { opacity: 1; transform: translateX(0); }
+            }
+          `}</style>
         </div>
-      </div>
+      )}
+      <PrintModal
+        invoices={selectedPrintInvoices}
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        onPrintConfirmed={(ids) => {
+          const printedIds = new Set(ids);
+          Promise.all([...printedIds].map((id) => markInvoiceWorkflowPrinted(id)))
+            .then(() => window.dispatchEvent(new Event('wellen-invoice-workflows')))
+            .catch((error) => {
+              console.error('Failed to save invoice print timestamps:', error);
+              setFeedback({
+                variant: 'error',
+                title: 'Print status could not be saved',
+                description: 'The invoice may have printed, but its print history was not recorded.',
+              });
+            });
+        }}
+      />
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        confirmLabel={feedback?.confirmLabel}
+        onConfirm={confirmApproval}
+        onClose={() => {
+          setFeedback(null);
+          setPendingApproval(null);
+        }}
+      />
     </div>
   );
 }

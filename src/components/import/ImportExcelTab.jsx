@@ -13,6 +13,7 @@ import {
   Search
 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
 
 export default function ImportExcelTab() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function ImportExcelTab() {
   const [detectedPromo, setDetectedPromo] = useState('');
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [feedback, setFeedback] = useState(null);
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -44,11 +46,8 @@ export default function ImportExcelTab() {
         let commonClientName = '';
         let dupCounter = 0;
 
-        const existingApproved = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-        const existingQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-        const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-
         const currentTimestamp = new Date().toISOString();
+        const importedKeys = new Set();
 
         const parsedData = rawJson
           .filter((row) => Object.values(row).join('').trim().length > 0)
@@ -152,46 +151,12 @@ export default function ImportExcelTab() {
             const finalTotalFaktur = rawTotalFaktur || (finalDpp + finalPpn);
 
             const cleanFaktur = noFaktur.toLowerCase().trim();
-            const cleanStore = storeName.toLowerCase().trim();
-
-            const isAlreadyApproved = existingApproved.some((inv) => {
-              const invNum = (inv.invoice_number || '').toLowerCase().trim();
-              if (invNum && invNum === cleanFaktur) return true;
-              return inv.items?.some((it) => {
-                const itFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-                const itStore = (it.item_description || it.store_name || '').toLowerCase().trim();
-                return itFaktur === cleanFaktur || (itFaktur === cleanFaktur && itStore === cleanStore);
-              });
-            });
-
-            const isWaitingApproval = existingQueue.some((q) => {
-              const qNum = (q.invoice_number || '').toLowerCase().trim();
-              if (qNum && qNum === cleanFaktur) return true;
-              return q.items?.some((it) => {
-                const itFaktur = (it.no_faktur || it.wpp_number || '').toLowerCase().trim();
-                return itFaktur === cleanFaktur;
-              });
-            });
-
-            const isDuplicateInStaging = existingStaging.some((w) => {
-              const wFaktur = (w.no_faktur || w.wpp_number || '').toLowerCase().trim();
-              return wFaktur && wFaktur === cleanFaktur;
-            });
-
-            let isDuplicate = false;
-            let duplicateReason = '';
-
-            if (isAlreadyApproved) {
-              isDuplicate = true;
-              duplicateReason = 'Invoice Already Issued (Approved)';
-            } else if (isWaitingApproval) {
-              isDuplicate = true;
-              duplicateReason = 'Under Review (Approval Queue)';
-            } else if (isDuplicateInStaging) {
-              isDuplicate = true;
-              duplicateReason = 'Already in Invoice List';
-            }
-
+            const compositeKey = `${cleanFaktur}__${customer.trim().toLowerCase()}`;
+            const isDuplicate = importedKeys.has(compositeKey);
+            importedKeys.add(compositeKey);
+            const duplicateReason = isDuplicate
+              ? 'Duplicate No WPP + client; latest row will be kept'
+              : '';
             if (isDuplicate) dupCounter += 1;
 
             return {
@@ -221,7 +186,7 @@ export default function ImportExcelTab() {
               import_date: rowDate,
               invoice_date: rowDate,
               waktu_import: rowDate,
-              status: isAlreadyApproved ? 'invoiced' : isWaitingApproval ? 'waiting_approval' : 'draft',
+              status: 'draft',
               isDuplicate: isDuplicate,
               duplicateReason: duplicateReason,
             };
@@ -234,7 +199,11 @@ export default function ImportExcelTab() {
         setDetectedPromo(commonPromoName || 'PROMO ADHOC WEEKEND BOOM DEALS');
       } catch (err) {
         console.error('Failed to process Excel file:', err);
-        alert('Invalid Excel file format.');
+        setFeedback({
+          variant: 'error',
+          title: 'Excel file could not be read',
+          description: 'Check that the selected file is a valid .xlsx or .xls worksheet.',
+        });
       }
     };
 
@@ -297,96 +266,78 @@ export default function ImportExcelTab() {
     );
   };
 
-  const handleProceedToInvoice = () => {
-    const selectedRows = importedRows.filter((r) => selectedIds.includes(r.id));
-
-    if (selectedRows.length === 0) {
-      alert('Please select at least one valid store to create an invoice.');
+  const handleSaveToMasterPos = () => {
+    if (importedRows.length === 0) {
+      setFeedback({
+        variant: 'error',
+        title: 'No POS rows to save',
+        description: 'Upload an Excel file with at least one valid POS row before continuing.',
+      });
       return;
     }
 
-    // 1. Data yang dipilih dikirim ke form Create Invoice
-    const stagedPayload = selectedRows.map((r) => ({
-      id: r.id,
-      no_faktur: r.no_faktur,
-      wpp_number: r.no_faktur,
-      item_description: r.store_name,
-      store_name: r.store_name,
-      sqm: '-',
-      qty: r.qty,
-      unit_price: r.unit_price,
-      total_faktur: r.total_faktur,
-      total_price: r.total_faktur,
-      nilai_wpp: r.total_faktur,
-      dpp: r.dpp,
-      nilai_barang: r.nilai_barang,
-      nilaiBarang: r.nilai_barang,
-      jasa_cetak: r.jasa_cetak,
-      jasaCetak: r.jasa_cetak,
-      pph23: r.pph23,
-      wht: r.wht,
-      dpp_nilai_lain_barang: r.dpp_nilai_lain_barang,
-      dpp_nilai_lain_jasa_cetak: r.dpp_nilai_lain_jasa_cetak,
-      ppn: r.ppn,
-      client_name: detectedClient,
-      promo_name: detectedPromo,
-      import_date: r.import_date,
-      invoice_date: r.invoice_date || r.import_date,
-      status: 'waiting_approval',
-    }));
+    const importedAt = new Date().toISOString();
+    const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+    const stagingByKey = new Map();
 
-    // 2. Data yang TIDAK dipilih otomatis dimasukkan ke antrean Invoice List
-    const nowIso = new Date().toISOString();
-    const unselectedRows = importedRows
-      .filter((r) => !selectedIds.includes(r.id) && r.duplicateReason !== 'Invoice Already Issued (Approved)')
-      .map((r) => ({
-        ...r,
-        client_name: detectedClient || r.client_name,
-        promo_name: detectedPromo || r.promo_name,
-        // Status dan field kompatibel untuk Invoice List
-        status: 'ready_to_process',
-        stage_status: 'ready_to_process',
-        import_time: r.import_date ? `${r.import_date} 00:00:00` : nowIso,
-        waktu_import: r.import_date || nowIso,
-        wpp_value: r.total_faktur,
-        reject_reason: '',
-      }));
+    storedStaging.forEach((item) => {
+      const noWpp = (item.no_faktur || item.wpp_number || '').trim().toLowerCase();
+      const client = (item.client_name || '').trim().toLowerCase();
+      stagingByKey.set(`${noWpp}__${client}`, item);
+    });
 
-    try {
-      const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+    let skippedRows = 0;
+    importedRows.forEach((row) => {
+      const noWpp = (row.no_faktur || row.wpp_number || '').trim().toLowerCase();
+      const client = (row.client_name || detectedClient || '').trim().toLowerCase();
+      const key = `${noWpp}__${client}`;
+      const existing = stagingByKey.get(key);
+      if (existing && existing.status && !['draft', 'ready', 'ready_to_process'].includes(existing.status)) {
+        skippedRows += 1;
+        return;
+      }
 
-      // Kunci proteksi unik: kombinasi nomor faktur + nama toko
-      const makeKey = (item) =>
-        `${(item.no_faktur || item.wpp_number || '').trim().toLowerCase()}_${(item.store_name || item.item_description || '').trim().toLowerCase()}`;
+      const savedRow = {
+        ...existing,
+        ...row,
+        client_name: row.client_name || detectedClient,
+        promo_name: row.promo_name || detectedPromo,
+        import_date: importedAt,
+        imported_at: importedAt,
+        waktu_import: importedAt,
+        month_year: importedAt.slice(0, 7),
+        status: 'draft',
+        isDuplicate: false,
+        duplicateReason: '',
+      };
+      stagingByKey.set(key, savedRow);
+    });
 
-      const stagingMap = new Map();
-      existingStaging.forEach((item) => {
-        stagingMap.set(makeKey(item), item);
-      });
+    const updatedStaging = Array.from(stagingByKey.values());
+    localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
+    localStorage.setItem('wellen_imported_wpp', JSON.stringify(updatedStaging));
+    window.dispatchEvent(new Event('storage'));
 
-      // Hapus data yang dipilih saat ini agar tidak menggantung di antrean draft
-      selectedRows.forEach((item) => {
-        stagingMap.delete(makeKey(item));
-      });
+    setFeedback({
+      variant: 'success',
+      title: 'POS data saved',
+      description: `${importedRows.length - skippedRows} rows saved as Draft and ready in Invoices.${skippedRows > 0
+        ? ` ${skippedRows} row(s) already in an invoice workflow and were not overwritten.`
+        : ''}`,
+      confirmLabel: 'Open Invoices',
+    });
+  };
 
-      // Tambahkan data yang tidak dipilih jika belum pernah ada (proteksi duplikasi)
-      unselectedRows.forEach((item) => {
-        const key = makeKey(item);
-        if (!stagingMap.has(key)) {
-          stagingMap.set(key, item);
-        }
-      });
-
-      const updatedStaging = Array.from(stagingMap.values());
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-      window.dispatchEvent(new Event('storage'));
-    } catch (e) {
-      console.error('Failed to save remaining items to Invoice List:', e);
-    }
-
-    sessionStorage.setItem('wellen_import_source', 'excel');
-    sessionStorage.setItem('wellen_staged_items', JSON.stringify(stagedPayload));
-    router.push('/create-invoice');
+  const confirmImportAction = () => {
+    if (feedback?.action !== 'cancel') return;
+    setImportedRows([]);
+    setSelectedIds([]);
+    setFileName('');
+    setDetectedClient('');
+    setDetectedPromo('');
+    setDuplicateCount(0);
+    setSearchQuery('');
+    setFeedback(null);
   };
 
   const filteredRows = importedRows.filter((row) => {
@@ -415,7 +366,7 @@ export default function ImportExcelTab() {
   return (
     <div className="space-y-4">
       {/* Kotak Upload Excel */}
-      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-[#55e07e] transition-colors shadow-xs">
+      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-amber-500 transition-colors shadow-xs">
         <input
           type="file"
           id="excelUpload"
@@ -424,7 +375,7 @@ export default function ImportExcelTab() {
           className="hidden"
         />
         <label htmlFor="excelUpload" className="cursor-pointer flex items-center justify-center gap-4">
-          <div className="p-2 bg-[#55e07e]/10 rounded-full text-[#55e07e] shrink-0">
+          <div className="p-2 bg-amber-50 rounded-full text-amber-700 shrink-0">
             <UploadCloud size={22} />
           </div>
           <div className="text-left">
@@ -479,28 +430,24 @@ export default function ImportExcelTab() {
           <div className="p-3.5 bg-white flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs border-b border-stone-200">
             <div className="flex items-center gap-2.5">
               <span className="font-semibold text-stone-800 flex items-center gap-1.5 text-xs">
-                <CheckCircle2 size={15} className="text-emerald-500" />
+                <CheckCircle2 size={15} className="text-amber-600" />
                 POS Data Breakdown Results ({importedRows.length} rows)
               </span>
               <span className="text-[11px] text-stone-400">
-                ({selectedIds.length} selected for invoice)
+                ({importedRows.length} rows to save as Draft)
               </span>
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Cancel this Excel import and clear parsed rows?')) {
-                    setImportedRows([]);
-                    setSelectedIds([]);
-                    setFileName('');
-                    setDetectedClient('');
-                    setDetectedPromo('');
-                    setDuplicateCount(0);
-                    setSearchQuery('');
-                  }
-                }}
+                onClick={() => setFeedback({
+                  variant: 'confirm',
+                  title: 'Cancel this Excel import?',
+                  description: 'The parsed rows and file selection will be cleared.',
+                  confirmLabel: 'Clear import',
+                  action: 'cancel',
+                })}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-semibold transition cursor-pointer shrink-0"
                 title="Cancel Import"
               >
@@ -515,21 +462,21 @@ export default function ImportExcelTab() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search Invoice No or Store..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg outline-none focus:border-[#55e07e] focus:bg-white text-stone-800 placeholder:text-stone-400 transition-colors"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg outline-none focus:border-amber-500 focus:bg-white text-stone-800 placeholder:text-stone-400 transition-colors"
                 />
               </div>
 
               <button
                 type="button"
-                onClick={handleProceedToInvoice}
-                disabled={selectedIds.length === 0}
+                onClick={handleSaveToMasterPos}
+                disabled={importedRows.length === 0}
                 className={`inline-flex items-center gap-2 font-bold px-3.5 py-1.5 rounded-lg text-xs shadow-xs transition-colors shrink-0 ${
-                  selectedIds.length > 0
-                    ? 'bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 cursor-pointer'
+                importedRows.length > 0
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                 }`}
               >
-                <span>Process ({selectedIds.length})</span>
+                <span>Save &amp; Open Invoices ({importedRows.length})</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -545,8 +492,8 @@ export default function ImportExcelTab() {
                       onClick={handleToggleSelectAll}
                       className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors mx-auto ${
                         isAllSelected
-                          ? 'bg-[#55e07e] border-[#55e07e] text-stone-950 font-bold'
-                          : 'border-stone-300 hover:border-[#55e07e] bg-white'
+                          ? 'bg-amber-500 border-amber-500 text-white font-bold'
+                          : 'border-stone-300 hover:border-amber-500 bg-white'
                       }`}
                       title={isAllSelected ? 'Deselect all' : 'Select all valid stores'}
                     >
@@ -586,7 +533,7 @@ export default function ImportExcelTab() {
                           isDup
                             ? 'bg-rose-50 text-rose-950 font-medium'
                             : isSelected
-                            ? 'bg-[#55e07e]/10'
+                            ? 'bg-amber-50'
                             : 'hover:bg-stone-50/40'
                         }`}
                       >
@@ -599,8 +546,8 @@ export default function ImportExcelTab() {
                               isDup
                                 ? 'bg-rose-200 border-rose-300 cursor-not-allowed text-transparent'
                                 : isSelected
-                                ? 'bg-[#55e07e] border-[#55e07e] text-stone-950 font-bold shadow-xs'
-                                : 'border-stone-300 hover:border-[#55e07e] bg-white'
+                                ? 'bg-amber-500 border-amber-500 text-white font-bold shadow-xs'
+                                : 'border-stone-300 hover:border-amber-500 bg-white'
                             }`}
                           >
                             {isSelected && !isDup && <Check size={10} strokeWidth={3} />}
@@ -629,7 +576,7 @@ export default function ImportExcelTab() {
                             value={row.total_faktur === 0 ? '' : row.total_faktur}
                             onChange={(e) => handleGrandTotalChange(row.id, e.target.value)}
                             placeholder="0"
-                            className={`w-32 text-right font-mono font-bold text-xs px-2.5 py-1.5 bg-white border border-stone-300 rounded-lg outline-none focus:border-[#55e07e] focus:ring-1 focus:ring-[#55e07e] ${
+                            className={`w-32 text-right font-mono font-bold text-xs px-2.5 py-1.5 bg-white border border-stone-300 rounded-lg outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 ${
                               isDup ? 'opacity-60 bg-stone-100 cursor-not-allowed text-rose-900' : 'text-stone-900'
                             }`}
                           />
@@ -653,7 +600,7 @@ export default function ImportExcelTab() {
                         <td className="py-3 px-3 text-right font-mono text-stone-700 whitespace-nowrap">
                           {formatRupiah(row.dpp_nilai_lain_jasa_cetak)}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">
+                        <td className="py-3 px-3 text-right font-mono text-stone-700 font-bold whitespace-nowrap">
                           {formatRupiah(row.ppn)}
                         </td>
                         <td className="py-3 px-3 text-center w-16">
@@ -699,7 +646,7 @@ export default function ImportExcelTab() {
                     <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap text-stone-800">
                       {formatRupiah(totalDppNilaiLainJasaCetak)}
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap text-emerald-700">
+                    <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap text-stone-700">
                       {formatRupiah(totalPpn)}
                     </td>
                     <td></td>
@@ -710,6 +657,22 @@ export default function ImportExcelTab() {
           </div>
         </div>
       )}
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        confirmLabel={feedback?.confirmLabel}
+        onConfirm={confirmImportAction}
+        onAction={() => {
+          if (feedback?.variant === 'success') {
+            router.push('/invoices');
+          } else {
+            setFeedback(null);
+          }
+        }}
+        onClose={() => setFeedback(null)}
+      />
     </div>
   );
 }

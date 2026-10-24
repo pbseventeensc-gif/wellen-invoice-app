@@ -3,18 +3,20 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { supabase } from '@/lib/supabase';
 import { isRouteAllowed } from '@/config/permissions';
-import { ShieldAlert, ArrowLeft, Menu, X } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, Loader2, Menu, X } from 'lucide-react';
 
 export default function DashboardLayoutWrapper({ children }) {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState('Super Admin');
-  const [loadingRole, setLoadingRole] = useState(false);
+  const router = useRouter();
+  const [roleState, setRoleState] = useState({ pathname: null, role: null, loading: true });
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [lastPathname, setLastPathname] = useState(pathname);
+  const loadingRole = roleState.pathname !== pathname || roleState.loading;
+  const userRole = roleState.pathname === pathname ? roleState.role : null;
 
   // Close mobile drawer on route transition (React-recommended pattern during render)
   if (lastPathname !== pathname) {
@@ -30,34 +32,31 @@ export default function DashboardLayoutWrapper({ children }) {
     let isMounted = true;
     const checkRole = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
-        const activeEmail = (user?.email || testingUser || '').toLowerCase();
-
-        let assignedRole = 'Super Admin';
-        if (activeEmail.includes('rizkha') || activeEmail.includes('risca') || activeEmail.includes('tanita')) {
-          assignedRole = 'Approval';
-        } else if (activeEmail.includes('keyjia') || activeEmail.includes('fahada')) {
-          assignedRole = 'AR Creator';
-        } else {
-          assignedRole = 'Super Admin';
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) {
+          if (isMounted) router.replace('/login?error=session');
+          return;
         }
 
-        if (user && isMounted) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          if (isMounted) setUserRole(data?.role || assignedRole);
-        } else if (isMounted) {
-          setUserRole(assignedRole);
-        }
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (error) throw error;
+        if (isMounted) setRoleState({ pathname, role: data?.role || null, loading: false });
       } catch (e) {
-        if (isMounted) setUserRole('Super Admin');
+        console.error('Failed to verify user access:', e);
+        if (isMounted) setRoleState({ pathname, role: null, loading: false });
       } finally {
-        if (isMounted) setLoadingRole(false);
+        if (isMounted) {
+          setRoleState((current) => (
+            current.pathname === pathname && current.loading
+              ? { pathname, role: null, loading: false }
+              : current
+          ));
+        }
       }
     };
 
@@ -65,7 +64,7 @@ export default function DashboardLayoutWrapper({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [pathname, isAuthPage]);
+  }, [pathname, isAuthPage, router]);
 
   if (isAuthPage) {
     return (
@@ -121,8 +120,13 @@ export default function DashboardLayoutWrapper({ children }) {
         <Sidebar />
       </aside>
 
-      <main className="flex-1 overflow-y-auto max-h-screen p-4 md:p-8 bg-stone-100 text-stone-900 w-full min-w-0">
-        {!loadingRole && !isAllowed ? (
+      <main className="flex-1 overflow-y-auto max-h-screen p-3 md:p-5 bg-stone-100 text-stone-900 w-full min-w-0">
+        {loadingRole ? (
+          <div className="min-h-[70vh] flex items-center justify-center" role="status">
+            <Loader2 size={24} className="animate-spin text-stone-500" />
+            <span className="sr-only">Checking account access</span>
+          </div>
+        ) : !isAllowed ? (
           <div className="min-h-[70vh] flex items-center justify-center">
             <div className="bg-white p-8 max-w-md w-full rounded-3xl border border-stone-200/80 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center mx-auto border border-stone-200">
@@ -131,7 +135,7 @@ export default function DashboardLayoutWrapper({ children }) {
               <div>
                 <h2 className="text-lg font-bold text-stone-900 tracking-tight">Access Restricted</h2>
                 <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                  Your current account role (<strong className="text-stone-900">{userRole}</strong>) does not have permission to access the <span className="font-mono text-stone-900">{pathname}</span> page.
+                  Your current account role (<strong className="text-stone-900">{userRole || 'Unassigned'}</strong>) does not have permission to access the <span className="font-mono text-stone-900">{pathname}</span> page.
                 </p>
               </div>
               <Link

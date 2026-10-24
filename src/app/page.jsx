@@ -12,38 +12,31 @@ import {
   FilePlus,
   ShieldCheck
 } from 'lucide-react';
+import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
 
 export default function HomePage() {
-  // Initial state nol (sama di server & client) untuk mencegah hydration mismatch.
-  // Data dari localStorage dimuat lewat loadStats() di useEffect setelah mount.
+  // Keep initial values identical on the server and client to prevent hydration mismatch.
+  // Import staging is local; invoice workflow counts come from Supabase.
   const [stats, setStats] = useState({ totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 });
+  const [loadError, setLoadError] = useState('');
 
-  const loadStats = () => {
+  const loadStats = async () => {
     try {
       const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const storedQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-      const storedInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-
       const stagingList = Array.isArray(storedStaging) ? storedStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-')) : [];
-      const queueList = Array.isArray(storedQueue) ? storedQueue.filter((it) => it.id !== 'wpk-1001') : [];
-      const invoiceList = Array.isArray(storedInvoices) ? storedInvoices.filter((it) => !it.id?.startsWith('wpk-default')) : [];
-
       const readyItems = stagingList.filter((it) => it.status === 'ready' || (!it.status || it.status === 'staged'));
+      const workflows = await listInvoiceWorkflows();
 
       setStats({
         totalStaging: stagingList.length,
-        pendingApproval: queueList.length,
-        approvedCount: invoiceList.length,
+        pendingApproval: workflows.filter((invoice) => invoice.status === 'waiting_approval').length,
+        approvedCount: workflows.filter((invoice) => invoice.status === 'approved').length,
         readyCount: readyItems.length,
       });
+      setLoadError('');
     } catch (e) {
       console.error('Failed to load dashboard stats:', e);
-      setStats({
-        totalStaging: 0,
-        pendingApproval: 0,
-        approvedCount: 0,
-        readyCount: 0,
-      });
+      setLoadError('Shared invoice status could not be loaded. Check your connection and access.');
     }
   };
 
@@ -52,11 +45,22 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStats();
     window.addEventListener('storage', loadStats);
-    return () => window.removeEventListener('storage', loadStats);
+    window.addEventListener('wellen-invoice-workflows', loadStats);
+    window.addEventListener('focus', loadStats);
+    return () => {
+      window.removeEventListener('storage', loadStats);
+      window.removeEventListener('wellen-invoice-workflows', loadStats);
+      window.removeEventListener('focus', loadStats);
+    };
   }, []);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-16">
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {loadError}
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
         <div>
@@ -69,7 +73,7 @@ export default function HomePage() {
         <div className="flex items-center gap-2">
           <Link
             href="/create-invoice"
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-2xs transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-2xs transition-all cursor-pointer"
           >
             <FilePlus size={16} />
             <span>Create Invoice</span>
@@ -82,13 +86,13 @@ export default function HomePage() {
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs hover:border-stone-300 transition-colors">
           <div className="flex items-center justify-between text-stone-500">
             <span className="text-[11px] font-bold text-stone-600 uppercase tracking-wider">Total Queue</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
               <FileText size={16} />
             </div>
           </div>
           <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.totalStaging}</p>
           <div className="flex items-center gap-1.5 mt-2 text-[11px] text-stone-600 font-normal">
-            <TrendingUp size={12} className="text-blue-600" />
+            <TrendingUp size={12} className="text-amber-600" />
             <span>Active import staging</span>
           </div>
         </div>
@@ -101,7 +105,7 @@ export default function HomePage() {
             </div>
           </div>
           <p className="text-2xl font-bold font-mono text-stone-900 mt-3">{stats.pendingApproval}</p>
-          <div className="flex items-center gap-1.5 mt-2 text-[11px] text-blue-700 font-medium">
+          <div className="flex items-center gap-1.5 mt-2 text-[11px] text-amber-700 font-medium">
             <span>Requires manager approval</span>
           </div>
         </div>
@@ -137,7 +141,7 @@ export default function HomePage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div className="bg-white p-6 rounded-2xl border border-stone-200/80 shadow-2xs flex flex-col justify-between space-y-4">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-700 uppercase tracking-wider">
               Data Processing
             </div>
             <h2 className="text-base font-bold text-stone-900">Import Excel WPP & Client PO</h2>
@@ -150,7 +154,7 @@ export default function HomePage() {
             <span className="text-[11px] text-stone-500 font-medium font-mono">Module: /import</span>
             <Link
               href="/import"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-900 transition-colors"
             >
               <span>Open Document Ingestion</span>
               <ArrowUpRight size={14} />

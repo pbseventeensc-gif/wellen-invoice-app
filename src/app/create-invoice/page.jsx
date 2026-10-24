@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseExcelDate } from '@/utils/taxCalculator';
 import { supabase } from '@/lib/supabase';
+import { submitInvoiceWorkflow } from '@/utils/invoiceWorkflow';
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
 
 export default function CreateInvoicePage() {
   const router = useRouter();
@@ -19,6 +21,10 @@ export default function CreateInvoicePage() {
         const parsed = JSON.parse(staged);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const isPo = storedSource === 'po' || parsed.some((s) => s.isPoSource || s.importType === 'po' || (s.uom && s.uom !== 'PCS'));
+          const storedPoPpnSetting = sessionStorage.getItem('wellen_po_prices_include_ppn');
+          const poPricesIncludePpn = typeof parsed[0]?.po_prices_include_ppn === 'boolean'
+            ? parsed[0].po_prices_include_ppn
+            : storedPoPpnSetting === 'true';
 
           let fakturNo = '';
           if (parsed[0]?.no_faktur || parsed[0]?.wpp_number) {
@@ -30,7 +36,9 @@ export default function CreateInvoicePage() {
 
           const validStores = parsed.map((s, idx) => {
             const rawTotalFaktur = Number(s.total_faktur || s.total_price || s.raw_total || s.nilai_wpp || 0);
-            const breakdown = calculateFakturBreakdown(rawTotalFaktur);
+            const breakdown = calculateFakturBreakdown(
+              isPo ? rawTotalFaktur * (poPricesIncludePpn ? 1 : 1.11) : rawTotalFaktur
+            );
             const isJasa = (s.item_description || s.store_name || '').toUpperCase().trim() === 'JASA CETAK';
 
             const dpp = s.dpp !== undefined && Number(s.dpp) > 0 ? Number(s.dpp) : breakdown.dpp;
@@ -71,6 +79,7 @@ export default function CreateInvoicePage() {
 
           return {
             isPo,
+            poPricesIncludePpn,
             clientName: parsed[0]?.client_name || '',
             promoName: parsed[0]?.promo_name || '',
             fakturNo,
@@ -110,6 +119,7 @@ export default function CreateInvoicePage() {
 
   // State Item Toko Murni
   const [stores, setStores] = useState([]);
+  const [feedback, setFeedback] = useState(null);
   const [isInitialized, setIsInitialized] = useState(true);
   const [isFahadaLocked, setIsFahadaLocked] = useState(false);
 
@@ -124,6 +134,7 @@ export default function CreateInvoicePage() {
     setClientName(data.clientName || '');
     setPromoName(data.promoName || '');
     setImportSource(data.isPo ? 'po' : 'excel');
+    setIsPoExclVatActive(data.isPo && data.poPricesIncludePpn);
     setStores(data.stores || []);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -134,8 +145,7 @@ export default function CreateInvoicePage() {
     const loadArUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
-        const activeEmail = (user?.email || testingUser || '').toLowerCase();
+        const activeEmail = (user?.email || '').toLowerCase();
 
         if (activeEmail && isMounted) {
           if (activeEmail.includes('keyjia')) {
@@ -184,7 +194,9 @@ export default function CreateInvoicePage() {
     }
 
     const effectiveTotalPrice = Math.round(qty * effectiveUnitPrice);
-    const breakdown = calculateFakturBreakdown(effectiveTotalPrice);
+    const breakdown = calculateFakturBreakdown(
+      importSource === 'po' ? effectiveTotalPrice * 1.11 : effectiveTotalPrice
+    );
 
     const dpp = row.dpp !== undefined && Number(row.dpp) > 0 ? Number(row.dpp) : breakdown.dpp;
     const nilaiBarang = row.nilai_barang !== undefined && Number(row.nilai_barang) > 0 ? Number(row.nilai_barang) : breakdown.nilaiBarang;
@@ -238,20 +250,32 @@ export default function CreateInvoicePage() {
     ? totalPoNetOverall + vatAmount
     : (totalDppOverall + vatAmount);
 
-  const handleSubmitApproval = () => {
+  const handleSubmitApproval = async () => {
     if (stores.length === 0) {
-      alert('Please add at least one store item.');
+      setFeedback({
+        variant: 'error',
+        title: 'No invoice items',
+        description: 'Add at least one store item before submitting this invoice.',
+      });
       return;
     }
 
     const cleanWpkNumber = (wppNumber || '').trim();
     if (!cleanWpkNumber) {
-      alert('Please enter a valid WPK Number.');
+      setFeedback({
+        variant: 'error',
+        title: 'WPK number required',
+        description: 'Enter a valid WPK number before submitting the invoice.',
+      });
       return;
     }
 
     if (!invoiceDate) {
-      alert('Please select an Invoice Date.');
+      setFeedback({
+        variant: 'error',
+        title: 'Invoice date required',
+        description: 'Select an invoice date before submitting the invoice.',
+      });
       return;
     }
 
@@ -268,6 +292,7 @@ export default function CreateInvoicePage() {
       is_dpp_active: isDppActive,
       show_tax_breakdown_in_print: showTaxBreakdownInPrint,
       is_po_excl_vat_active: isPoExclVatActive,
+      po_prices_include_ppn: isPoExclVatActive,
       show_jasa_cetak_po: showJasaCetakPo,
       total_faktur: totalPoNetOverall,
       total_harga_net: totalPoNetOverall,
@@ -284,6 +309,7 @@ export default function CreateInvoicePage() {
       importSource: importSource,
       items: calculatedStoreRows.map((it) => ({
         id: it.id,
+        source_no_wpp: it.source_no_wpp || it.wpp_number || it.no_faktur || '',
         no_faktur: cleanWpkNumber || it.no_faktur,
         wpp_number: cleanWpkNumber || it.wpp_number,
         item_description: it.item_description || it.store_name,
@@ -305,8 +331,17 @@ export default function CreateInvoicePage() {
       })),
     };
 
-    const existingQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-    localStorage.setItem('wellen_approval_queue', JSON.stringify([payload, ...existingQueue]));
+    try {
+      await submitInvoiceWorkflow(payload);
+    } catch (error) {
+      console.error('Failed to submit invoice to the approval workflow:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Invoice could not be submitted',
+        description: 'The invoice was not saved to the shared approval queue. Verify your access and connection, then try again.',
+      });
+      return;
+    }
 
     try {
       const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
@@ -333,10 +368,14 @@ export default function CreateInvoicePage() {
     }
 
     sessionStorage.removeItem('wellen_staged_items');
-    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('wellen-invoice-workflows'));
 
-    alert(`Invoice ${cleanWpkNumber} successfully submitted to Approval Queue!`);
-    router.push('/approval');
+    setFeedback({
+      variant: 'success',
+      title: 'Invoice submitted',
+      description: `Invoice ${cleanWpkNumber} was added to the approval queue successfully.`,
+      confirmLabel: 'View approval queue',
+    });
   };
 
   return (
@@ -364,7 +403,7 @@ export default function CreateInvoicePage() {
           type="button"
           onClick={handleSubmitApproval}
           disabled={stores.length === 0}
-          className="inline-flex items-center gap-2 bg-[#55e07e] hover:bg-[#42ce6b] disabled:opacity-50 text-stone-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
         >
           <Send size={14} />
           <span>Submit for Approval</span>
@@ -384,7 +423,7 @@ export default function CreateInvoicePage() {
               value={wppNumber}
               onChange={(e) => setWppNumber(e.target.value)}
               placeholder="e.g. WPK 0826-300006"
-              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800"
+              className="w-full text-xs font-mono font-bold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-800"
             />
           </div>
           <div>
@@ -395,7 +434,7 @@ export default function CreateInvoicePage() {
               type="date"
               value={invoiceDate}
               onChange={(e) => setInvoiceDate(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 font-mono cursor-pointer"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-800 font-mono cursor-pointer"
             />
           </div>
           <div>
@@ -406,7 +445,7 @@ export default function CreateInvoicePage() {
               value={createdByName}
               onChange={(e) => setCreatedByName(e.target.value)}
               disabled={isFahadaLocked}
-              className={`w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 ${
+              className={`w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 ${
                 isFahadaLocked ? 'opacity-80 bg-stone-100 cursor-not-allowed select-none' : 'cursor-pointer'
               }`}
             >
@@ -429,7 +468,7 @@ export default function CreateInvoicePage() {
               type="text"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 uppercase"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
             />
           </div>
           <div>
@@ -440,7 +479,7 @@ export default function CreateInvoicePage() {
               rows={3}
               value={clientAddress}
               onChange={(e) => setClientAddress(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-700 leading-relaxed resize-none uppercase"
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none uppercase"
             />
           </div>
         </div>
@@ -455,7 +494,7 @@ export default function CreateInvoicePage() {
               type="text"
               value={promoName}
               onChange={(e) => setPromoName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-900 uppercase"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
             />
           </div>
 
@@ -473,7 +512,7 @@ export default function CreateInvoicePage() {
                         name="dppOptionPo"
                         checked={isDppActive === true}
                         onChange={() => setIsDppActive(true)}
-                        className="accent-[#55e07e] w-4 h-4"
+                        className="accent-amber-500 w-4 h-4"
                       />
                       <span>ON</span>
                     </label>
@@ -483,7 +522,7 @@ export default function CreateInvoicePage() {
                         name="dppOptionPo"
                         checked={isDppActive === false}
                         onChange={() => setIsDppActive(false)}
-                        className="accent-[#55e07e] w-4 h-4"
+                        className="accent-amber-500 w-4 h-4"
                       />
                       <span>OFF</span>
                     </label>
@@ -492,7 +531,7 @@ export default function CreateInvoicePage() {
 
                 <div>
                   <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                    Harga Excl. PPN per Line (Harga PO / 1.11) :
+                    Harga PO sudah termasuk PPN? :
                   </label>
                   <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -501,9 +540,9 @@ export default function CreateInvoicePage() {
                         name="poExclVatOption"
                         checked={isPoExclVatActive === true}
                         onChange={() => setIsPoExclVatActive(true)}
-                        className="accent-[#55e07e] w-4 h-4"
+                        className="accent-amber-500 w-4 h-4"
                       />
-                      <span>ON</span>
+                      <span>Include PPN</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -511,9 +550,9 @@ export default function CreateInvoicePage() {
                         name="poExclVatOption"
                         checked={isPoExclVatActive === false}
                         onChange={() => setIsPoExclVatActive(false)}
-                        className="accent-[#55e07e] w-4 h-4"
+                        className="accent-amber-500 w-4 h-4"
                       />
-                      <span>OFF</span>
+                      <span>Exclude PPN</span>
                     </label>
                   </div>
                 </div>
@@ -528,7 +567,7 @@ export default function CreateInvoicePage() {
                       name="dppOption"
                       checked={isDppActive === true}
                       onChange={() => setIsDppActive(true)}
-                      className="accent-[#55e07e] w-4 h-4"
+                      className="accent-amber-500 w-4 h-4"
                     />
                     <span>ON</span>
                   </label>
@@ -538,7 +577,7 @@ export default function CreateInvoicePage() {
                       name="dppOption"
                       checked={isDppActive === false}
                       onChange={() => setIsDppActive(false)}
-                      className="accent-[#55e07e] w-4 h-4"
+                      className="accent-amber-500 w-4 h-4"
                     />
                     <span>OFF</span>
                   </label>
@@ -558,8 +597,8 @@ export default function CreateInvoicePage() {
           <span className="text-xs text-stone-400 font-normal">Line Count: {calculatedStoreRows.length} Items</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="data-table-scroll">
+          <table className="data-table w-full text-left text-xs border-collapse">
             <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-semibold border-b border-stone-200 tracking-wider">
               <tr>
                 <th className="py-3 px-3 w-10 text-center font-semibold">NO</th>
@@ -608,7 +647,7 @@ export default function CreateInvoicePage() {
                   <td className="py-3 px-3 text-right font-mono text-stone-700 whitespace-nowrap font-normal">
                     {formatRupiah(row.dppNilaiLainJasaCetak)}
                   </td>
-                  <td className="py-3 px-3 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">
+                  <td className="py-3 px-3 text-right font-mono text-stone-700 font-bold whitespace-nowrap">
                     {formatRupiah(row.ppn)}
                   </td>
                   <td className="py-3 px-3 text-center">
@@ -653,7 +692,7 @@ export default function CreateInvoicePage() {
                   <td className="py-3 px-3 text-right font-mono text-stone-700 whitespace-nowrap font-normal">
                     {formatRupiah(totalDppNilaiLainJasaCetakOverall)}
                   </td>
-                  <td className="py-3 px-3 text-right font-mono font-extrabold text-emerald-700 whitespace-nowrap">
+                  <td className="py-3 px-3 text-right font-mono font-extrabold text-stone-800 whitespace-nowrap">
                     {formatRupiah(vatAmount)}
                   </td>
                   <td></td>
@@ -699,6 +738,21 @@ export default function CreateInvoicePage() {
           </div>
         </div>
       </div>
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        confirmLabel={feedback?.confirmLabel}
+        onAction={() => {
+          if (feedback?.variant === 'success') {
+            router.push('/approval');
+          } else {
+            setFeedback(null);
+          }
+        }}
+        onClose={() => setFeedback(null)}
+      />
     </div>
   );
 }

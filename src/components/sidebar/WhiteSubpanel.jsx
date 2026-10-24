@@ -5,17 +5,17 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import userAvatar from '@/assets/logo_userlogin.png';
+import { isRouteAllowed } from '@/config/permissions';
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
+import { markAllInvoiceStatusesSeen } from '@/utils/invoiceNotifications';
+import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
 import { 
-  FileSpreadsheet, 
-  FileText, 
-  Clock, 
-  FileCheck2, 
+  Database,
+  FileCheck2,
+  ClipboardCheck,
   BarChart3, 
   ArrowUpRight,
-  CheckCircle2,
-  AlertCircle,
   LogOut,
   Trash2
 } from 'lucide-react';
@@ -26,76 +26,10 @@ export default function WhiteSubpanel() {
 
   // Initial state harus identik antara server & client untuk mencegah hydration mismatch.
   // Nilai dari localStorage disinkronkan di useEffect setelah mount.
-  const [pendingDownloadCount, setPendingDownloadCount] = useState(0);
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
-  const [pendingRejectedCount, setPendingRejectedCount] = useState(0);
-  const [profile, setProfile] = useState({ name: 'FAHADA', role: 'Super Admin' });
-
-  const getProfileFromStorage = () => {
-    const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();
-    if (savedUser.includes('rizkha') || savedUser.includes('risca')) {
-      return { name: 'RISCA', role: 'Approval' };
-    }
-    if (savedUser.includes('tanita')) {
-      return { name: 'TANITA', role: 'Approval' };
-    }
-    if (savedUser.includes('keyjia')) {
-      return { name: 'KEYJIA', role: 'AR Created' };
-    }
-    if (savedUser.includes('fahada')) {
-      return { name: 'FAHADA', role: 'AR Created' };
-    }
-    return { name: 'Admin Testing', role: 'Super Admin' };
-  };
-
-  const updateApprovedCount = () => {
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const unprinted = parsed.filter((inv) => !inv.time_download).length;
-          setPendingDownloadCount(unprinted);
-        }
-      } else {
-        setPendingDownloadCount(0);
-      }
-    } catch (e) {
-      console.error(e);
-      setPendingDownloadCount(0);
-    }
-  };
-
-  const updateApprovalCount = () => {
-    try {
-      const stored = localStorage.getItem('wellen_approval_queue');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setPendingApprovalCount(parsed.length);
-        }
-      } else {
-        setPendingApprovalCount(0);
-      }
-    } catch (e) {
-      console.error(e);
-      setPendingApprovalCount(0);
-    }
-  };
-
-  const updateRejectedCount = () => {
-    try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-
-      const waitingCount = approvalQueue.reduce((acc, q) => acc + (q.items?.length || 0), 0) + storedStaging.filter((it) => it.status === 'waiting_approval').length;
-      const rejectedCount = storedStaging.filter((it) => it.status === 'rejected').length;
-
-      setPendingRejectedCount(waitingCount + rejectedCount);
-    } catch (e) {
-      setPendingRejectedCount(0);
-    }
-  };
+  const [profile, setProfile] = useState({ name: 'Account', role: 'Role not assigned' });
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [approvalQueueCount, setApprovalQueueCount] = useState(0);
+  const [feedback, setFeedback] = useState(null);
 
   const cleanLegacyMockData = () => {
     try {
@@ -137,121 +71,121 @@ export default function WhiteSubpanel() {
   };
 
   const handleResetAllData = () => {
-    if (window.confirm('Hapus semua data invoice, antrean approval, dan staging untuk testing bersih?')) {
+    setFeedback({
+      variant: 'confirm',
+      title: 'Clear sample data?',
+      description: 'This removes all invoice, approval queue, and POS staging data from this browser.',
+      confirmLabel: 'Clear sample data',
+    });
+  };
+
+  const confirmResetAllData = () => {
+    setFeedback(null);
+    try {
       localStorage.removeItem('wellen_invoices');
       localStorage.removeItem('wellen_approval_queue');
       localStorage.removeItem('wellen_wpp_staging');
       localStorage.removeItem('wellen_imported_wpp');
+      localStorage.removeItem('wellen_new_status_count');
+      localStorage.removeItem('wellen_invoice_status_seen');
       sessionStorage.removeItem('wellen_staged_items');
       sessionStorage.removeItem('wellen_import_source');
 
-      setPendingDownloadCount(0);
-      setPendingApprovalCount(0);
-      setPendingRejectedCount(0);
-
       window.dispatchEvent(new Event('storage'));
-      alert('Semua data testing telah dibersihkan (0 item). Halaman akan dimuat ulang.');
-      window.location.reload();
+      window.dispatchEvent(new Event('wellen-status-notifications'));
+      setFeedback({
+        variant: 'success',
+        title: 'Sample data cleared',
+        description: 'Invoice, approval queue, and POS staging data have been removed from this browser.',
+      });
+    } catch (error) {
+      console.error('Failed to clear sample data:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Sample data could not be cleared',
+        description: 'The browser did not allow the local data to be removed. Please try again.',
+      });
     }
   };
 
   useEffect(() => {
     cleanLegacyMockData();
-    window.addEventListener('storage', updateApprovedCount);
-    window.addEventListener('storage', updateApprovalCount);
-    window.addEventListener('storage', updateRejectedCount);
+    const updateNotificationCount = async () => {
+      const count = Number(localStorage.getItem('wellen_new_status_count') || 0);
+      setNotificationCount(Number.isFinite(count) ? count : 0);
+      try {
+        const queue = await listInvoiceWorkflows(['waiting_approval']);
+        setApprovalQueueCount(queue.length);
+      } catch (error) {
+        console.error('Failed to read approval queue count:', error);
+      }
+    };
+    updateNotificationCount();
+    window.addEventListener('storage', updateNotificationCount);
+    window.addEventListener('wellen-invoice-workflows', updateNotificationCount);
+    window.addEventListener('wellen-status-notifications', updateNotificationCount);
 
     const loadProfile = async () => {
-      // Sinkronkan state dari localStorage setelah hydration (mencegah hydration mismatch)
-      setProfile(getProfileFromStorage());
-      updateApprovedCount();
-      updateApprovalCount();
-      updateRejectedCount();
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const savedUser = (localStorage.getItem('wellen_testing_user') || '').toLowerCase();
-        const activeEmail = (user?.email || savedUser).toLowerCase();
-
-        let defaultName = 'Super Admin';
-        let defaultRole = 'Super Admin';
-
-        if (activeEmail.includes('keyjia')) {
-          defaultName = 'KEYJIA';
-          defaultRole = 'AR Created';
-        } else if (activeEmail.includes('fahada')) {
-          defaultName = 'FAHADA';
-          defaultRole = 'AR Created';
-        } else if (activeEmail.includes('rizkha') || activeEmail.includes('risca')) {
-          defaultName = 'RISCA';
-          defaultRole = 'Approval';
-        } else if (activeEmail.includes('tanita')) {
-          defaultName = 'TANITA';
-          defaultRole = 'Approval';
-        } else if (activeEmail.includes('admin')) {
-          defaultName = 'Super Admin';
-          defaultRole = 'Super Admin';
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user) {
+          setProfile({ name: 'Account', role: 'Role not assigned' });
+          return;
         }
 
-        if (user) {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('full_name, role')
-            .eq('id', user.id)
-            .maybeSingle();
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (error) throw error;
 
-          if (error) {
-            console.error('Error fetching profile:', error.message);
-          }
-
-          const finalName = data?.full_name || defaultName;
-          const finalRole = data?.role || defaultRole;
-
-          setProfile({
-            name: finalName,
-            role: finalRole,
-          });
-
-          // Otomatis sinkronkan profile ke tabel Supabase jika belum tersimpan
-          if (!data && user.id) {
-            await supabase.from('profiles').upsert({
-              id: user.id,
-              full_name: finalName,
-              role: finalRole,
-            }).catch(() => {});
-          }
-        } else {
-          setProfile({
-            name: defaultName,
-            role: defaultRole,
-          });
-        }
+        setProfile({
+          name: data?.full_name || user.email?.split('@')[0] || 'Account',
+          role: data?.role || 'Role not assigned',
+        });
       } catch (err) {
         console.error('Failed to load profile:', err);
       }
     };
 
     loadProfile();
-
     return () => {
-      window.removeEventListener('storage', updateApprovedCount);
-      window.removeEventListener('storage', updateApprovalCount);
-      window.removeEventListener('storage', updateRejectedCount);
+      window.removeEventListener('storage', updateNotificationCount);
+      window.removeEventListener('wellen-invoice-workflows', updateNotificationCount);
+      window.removeEventListener('wellen-status-notifications', updateNotificationCount);
     };
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem('wellen_testing_user');
-    router.push('/login');
-    router.refresh();
+    try {
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith('wellen_'))
+        .forEach((key) => localStorage.removeItem(key));
+      Object.keys(sessionStorage)
+        .filter((key) => key.startsWith('wellen_'))
+        .forEach((key) => sessionStorage.removeItem(key));
+
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('Failed to clear local invoice data or sign out:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Could not securely sign out',
+        description: 'Local invoice data could not be cleared or your session could not be closed. Please try again before leaving this shared device.',
+      });
+    }
   };
 
   const allInvoiceMenus = [
-    { label: 'Import WPP (Excel)', href: '/import', icon: FileSpreadsheet },
-    { label: 'Create Invoice', href: '/create-invoice', icon: FileText },
-    { label: 'Approval Queue', href: '/approval', icon: Clock },
-    { label: 'Status Approval', href: '/status-approval', icon: AlertCircle },
-    { label: 'Invoice List', href: '/invoices', icon: FileCheck2 },
+    { label: 'Master POS / Draft', href: '/master-pos', icon: Database },
+    { label: 'Invoices', href: '/invoices', icon: FileCheck2 },
+    { label: 'Approval Queue', href: '/approval', icon: ClipboardCheck },
   ];
 
   const allReportMenus = [
@@ -259,54 +193,57 @@ export default function WhiteSubpanel() {
     { label: 'DJP e-Faktur Exporter', href: '/efaktur-export', icon: ArrowUpRight },
   ];
 
-  // Samakan tampilan untuk semua role (Admin & User melihat menu yang sama persis)
-  const visibleInvoiceMenus = allInvoiceMenus;
-  const visibleReportMenus = allReportMenus;
-  const showApprovedInvoices = true;
+  const visibleInvoiceMenus = allInvoiceMenus.filter((item) =>
+    isRouteAllowed(profile.role, item.href)
+  );
+  const visibleReportMenus = allReportMenus.filter((item) =>
+    isRouteAllowed(profile.role, item.href)
+  );
 
   return (
-    <div className="w-64 bg-white border-r border-stone-200/80 flex flex-col justify-between py-6 px-4 shrink-0 select-none">
+    <div className="flex h-full w-56 shrink-0 select-none flex-col justify-between border-r border-slate-200 bg-white px-3 py-5">
       <div>
         {/* Header Modul */}
         <div className="mb-6 px-2">
-          <h2 className="text-base font-bold text-stone-900 tracking-tight">Sales & Invoicing</h2>
-          <p className="text-[11px] text-stone-500 font-medium mt-0.5">Wellen Workspace</p>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-950">Sales & Invoicing</h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">Wellen Workspace</p>
         </div>
 
         {/* Section: INVOICES */}
         {visibleInvoiceMenus.length > 0 && (
           <div className="mb-6">
-            <p className="px-3 text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-2">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Invoices & Queue
             </p>
             <div className="space-y-1">
               {visibleInvoiceMenus.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
-                const isApprovalQueue = item.href === '/approval';
-                const isStatusApproval = item.href === '/status-approval';
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                    className={`flex items-center justify-between rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                       isActive
-                        ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs'
-                        : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                        ? 'bg-amber-50 font-semibold text-amber-700'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                     }`}
+                    onClick={() => {
+                      if (item.href === '/invoices') markAllInvoiceStatusesSeen();
+                    }}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon size={15} className={isActive ? 'text-blue-600' : isStatusApproval ? 'text-rose-500' : 'text-stone-400'} />
+                      <Icon size={18} className={isActive ? 'text-amber-600' : 'text-slate-400'} />
                       <span>{item.label}</span>
                     </div>
-                    {isApprovalQueue && pendingApprovalCount > 0 && (
-                      <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
-                        {pendingApprovalCount}
+                    {item.href === '/invoices' && notificationCount > 0 && (
+                      <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                        {notificationCount > 99 ? '99+' : notificationCount}
                       </span>
                     )}
-                    {isStatusApproval && pendingRejectedCount > 0 && (
-                      <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
-                        {pendingRejectedCount}
+                    {item.href === '/approval' && approvalQueueCount > 0 && (
+                      <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                        {approvalQueueCount > 99 ? '99+' : approvalQueueCount}
                       </span>
                     )}
                   </Link>
@@ -319,7 +256,7 @@ export default function WhiteSubpanel() {
         {/* Section: REPORTS */}
         {visibleReportMenus.length > 0 && (
           <div className="mb-6">
-            <p className="px-3 text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-2">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Compliance & Reporting
             </p>
             <div className="space-y-1">
@@ -330,39 +267,17 @@ export default function WhiteSubpanel() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                       isActive
-                        ? 'bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs'
-                        : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                        ? 'bg-amber-50 font-semibold text-amber-700'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                     }`}
                   >
-                    <Icon size={15} className={isActive ? 'text-blue-600' : 'text-stone-400'} />
+                    <Icon size={18} className={isActive ? 'text-amber-600' : 'text-slate-400'} />
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
-
-              {/* Shortcut Approved Invoices */}
-              {showApprovedInvoices && (
-                <Link
-                  href="/approved-invoices"
-                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-                    pathname === '/approved-invoices'
-                      ? 'bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 shadow-2xs'
-                      : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 size={15} className={pathname === '/approved-invoices' ? 'text-emerald-700' : 'text-emerald-600'} />
-                    <span>Approved Invoices</span>
-                  </div>
-                  {pendingDownloadCount > 0 && (
-                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
-                      {pendingDownloadCount}
-                    </span>
-                  )}
-                </Link>
-              )}
             </div>
           </div>
         )}
@@ -396,7 +311,7 @@ export default function WhiteSubpanel() {
                   priority
                 />
               </div>
-              <span className="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+              <span className="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" />
             </div>
             <div>
               <p className="text-xs font-bold text-stone-900 leading-tight">{profile.name}</p>
@@ -414,6 +329,15 @@ export default function WhiteSubpanel() {
           </button>
         </div>
       </div>
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        confirmLabel={feedback?.confirmLabel}
+        onConfirm={confirmResetAllData}
+        onClose={() => setFeedback(null)}
+      />
     </div>
   );
 }

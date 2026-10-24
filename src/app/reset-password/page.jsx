@@ -62,7 +62,7 @@ export default function ResetPasswordPage() {
         )}
 
         {isDone ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-center text-emerald-400">
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-center text-amber-700">
             <CheckCircle2 size={32} />
             <p className="text-sm font-semibold">Kata Sandi Berhasil Diperbarui!</p>
             <p className="text-xs text-stone-300">Mengalihkan ke dashboard...</p>

@@ -1,79 +1,53 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import {
-  XCircle,
   Clock,
   Search,
-  Printer,
-  Trash2,
-  Building2,
-  User,
   AlertCircle,
   Edit3,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Filter
+  X
 } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
-import PrintModal from '@/components/invoice-print/PrintModal';
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
+import TablePagination from '@/components/ui/TablePagination';
+import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
 
 export default function StatusApprovalPage() {
-  const router = useRouter();
   // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
-  // Data dari localStorage dimuat lewat loadTrackingItems() di useEffect setelah mount.
+  // Only unsent drafts remain local; submitted approval state is read from Supabase.
   const [trackingItems, setTrackingItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-
-  // Edit Modal State for Rejected Items
+  const [feedback, setFeedback] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const loadTrackingItems = () => {
+  const loadTrackingItems = async () => {
     try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-
-      // 1. Get rejected items from staging (filter out mock)
-      const rejectedRows = storedStaging.filter((it) => it.status === 'rejected' && !it.id?.startsWith('imp-'));
-
-      // 2. Get waiting items from approval queue (flatten items)
-      const waitingRows = [];
-      approvalQueue.filter((q) => q.id !== 'wpk-1001').forEach((q) => {
-        const arName = q.ar_name || q.created_by || 'FAHADA';
-        q.items?.forEach((it) => {
-          waitingRows.push({
-            ...it,
-            status: 'waiting_approval',
-            client_name: q.client_name || it.client_name || 'PT ASPIRASI HIDUP INDONESIA TBK',
-            ar_name: arName,
-            wpp_number: it.wpp_number || it.no_faktur || q.invoice_number,
-            total_price: it.total_price || it.total_faktur || q.grand_total,
-          });
-        });
+      const invoices = await listInvoiceWorkflows(['waiting_approval', 'rejected']);
+      setTrackingItems(invoices.flatMap((invoice) => (invoice.items || []).map((item, index) => ({
+        ...item,
+        id: item.id || `${invoice.id}-${index}`,
+        invoice_number: invoice.invoice_number,
+        status: invoice.status,
+        client_name: invoice.client_name || item.client_name,
+        ar_name: invoice.ar_name || invoice.created_by || '—',
+        wpp_number: item.source_no_wpp || item.wpp_number || item.no_faktur || invoice.invoice_number,
+        store_name: item.store_name || item.item_description || '',
+        total_price: item.total_price || item.total_faktur || invoice.grand_total || 0,
+        reject_reason: invoice.reject_reason,
+      }))));
+    } catch (error) {
+      console.error('Failed to load invoice status from Supabase:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Invoice status could not be loaded',
+        description: 'The shared invoice workflow could not be reached. Check your connection and Supabase access, then retry.',
       });
-
-      // Combine both, avoiding duplicate IDs if any
-      const map = new Map();
-      [...waitingRows, ...rejectedRows].forEach((row) => {
-        if (row.id) map.set(row.id, row);
-      });
-
-      const trackingRows = Array.from(map.values());
-      setTrackingItems(trackingRows);
-    } catch (e) {
-      console.error('Failed to load tracking items:', e);
-      setTrackingItems([]);
     }
   };
 
@@ -81,81 +55,54 @@ export default function StatusApprovalPage() {
     // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTrackingItems();
-    window.addEventListener('storage', loadTrackingItems);
-    return () => window.removeEventListener('storage', loadTrackingItems);
+    window.addEventListener('wellen-invoice-workflows', loadTrackingItems);
+    window.addEventListener('focus', loadTrackingItems);
+    return () => {
+      window.removeEventListener('wellen-invoice-workflows', loadTrackingItems);
+      window.removeEventListener('focus', loadTrackingItems);
+    };
   }, []);
-
-  const handleDeleteItem = (id, invNumber) => {
-    if (confirm(`Delete item ${invNumber} from tracking list?`)) {
-      try {
-        const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-        const updatedStaging = storedStaging.filter((it) => it.id !== id);
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-
-        const approvalQueue = JSON.parse(localStorage.getItem('wellen_approval_queue') || '[]');
-        const updatedQueue = approvalQueue.map((q) => ({
-          ...q,
-          items: q.items?.filter((it) => it.id !== id),
-        })).filter((q) => q.items && q.items.length > 0);
-        localStorage.setItem('wellen_approval_queue', JSON.stringify(updatedQueue));
-
-        loadTrackingItems();
-        window.dispatchEvent(new Event('storage'));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
-
-  const handleClearAll = () => {
-    if (confirm('Reset status for all tracking items back to draft?')) {
-      try {
-        const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-        const updatedStaging = storedStaging.map((it) =>
-          it.status === 'waiting_approval' || it.status === 'rejected' ? { ...it, status: 'draft', reject_reason: '' } : it
-        );
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-        localStorage.setItem('wellen_approval_queue', JSON.stringify([]));
-
-        loadTrackingItems();
-        window.dispatchEvent(new Event('storage'));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
 
   const handleSaveEdit = () => {
     if (!editingItem) return;
     try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const updatedStaging = storedStaging.map((it) => {
-        if (it.id === editingItem.id) {
-          const q = Number(editingItem.qty) || 1;
-          const p = Number(editingItem.unit_price) || 0;
-          const totalPrice = Math.round(q * p);
-          return {
-            ...it,
-            store_name: editingItem.store_name,
-            item_description: editingItem.store_name,
-            qty: q,
-            unit_price: p,
-            total_price: totalPrice,
-            nilai_wpp: totalPrice,
-            status: 'draft', // Return to draft so it appears in Invoice List as ready/draft
-            reject_reason: '',
-          };
-        }
-        return it;
+      const staging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
+      if (!Array.isArray(staging)) throw new Error('POS staging data is not an array.');
+      const qty = Number(editingItem.qty) || 1;
+      const unitPrice = Number(editingItem.unit_price) || 0;
+      let updatedCount = 0;
+      const updated = staging.map((item) => {
+        if (item.id !== editingItem.id) return item;
+        updatedCount += 1;
+        const totalPrice = Math.round(qty * unitPrice);
+        return {
+          ...item,
+          store_name: editingItem.store_name,
+          item_description: editingItem.store_name,
+          qty,
+          unit_price: unitPrice,
+          total_price: totalPrice,
+          nilai_wpp: totalPrice,
+          status: 'draft',
+        };
       });
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-      loadTrackingItems();
+      if (!updatedCount) throw new Error('The local draft matching this rejected invoice item was not found.');
+      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updated));
       setIsEditModalOpen(false);
       setEditingItem(null);
-      alert('Rejected item successfully revised and returned to Invoice List!');
+      setFeedback({
+        variant: 'success',
+        title: 'Draft revision prepared',
+        description: 'A local draft was prepared. The rejected invoice remains unchanged in the shared approval history.',
+      });
       window.dispatchEvent(new Event('storage'));
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error('Failed to prepare rejected invoice revision:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Draft revision could not be prepared',
+        description: error.message || 'The local draft could not be updated.',
+      });
     }
   };
 
@@ -185,10 +132,11 @@ export default function StatusApprovalPage() {
   }, [trackingItems, statusFilter, searchTerm]);
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
+  const visiblePage = Math.min(currentPage, totalPages);
   const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const start = (visiblePage - 1) * pageSize;
     return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, currentPage, pageSize]);
+  }, [filteredItems, visiblePage, pageSize]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
@@ -206,16 +154,6 @@ export default function StatusApprovalPage() {
           </p>
         </div>
 
-        {trackingItems.length > 0 && (
-          <button
-            type="button"
-            onClick={handleClearAll}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-semibold transition cursor-pointer self-start"
-          >
-            <Trash2 size={14} />
-            Reset All Status
-          </button>
-        )}
       </div>
 
       {/* Summary Stats Cards */}
@@ -264,7 +202,7 @@ export default function StatusApprovalPage() {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:outline-none focus:border-[#55e07e] text-stone-900"
+              className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:outline-none focus:border-amber-500 text-stone-900"
             />
           </div>
 
@@ -312,8 +250,8 @@ export default function StatusApprovalPage() {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="data-table-scroll">
+          <table className="data-table w-full text-left text-xs border-collapse">
             <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-normal border-b border-stone-200 tracking-wider">
               <tr>
                 <th className="py-3.5 px-4 w-12 text-center font-normal">NO</th>
@@ -334,7 +272,7 @@ export default function StatusApprovalPage() {
                 </tr>
               ) : (
                 paginatedItems.map((item, idx) => {
-                  const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                  const globalIdx = (visiblePage - 1) * pageSize + idx + 1;
                   const isRejected = item.status === 'rejected';
                   return (
                     <tr key={item.id || idx} className="hover:bg-stone-50/50 transition-colors font-normal">
@@ -387,31 +325,15 @@ export default function StatusApprovalPage() {
                                 });
                                 setIsEditModalOpen(true);
                               }}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
-                              title="Edit Rejected Item"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-[10px] shadow-2xs transition-colors cursor-pointer"
+                              title="Prepare a local draft revision"
                             >
                               <Edit3 size={12} />
-                              Edit
+                              Edit Draft
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              disabled
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-stone-100 text-stone-400 rounded-xl text-[10px] font-normal cursor-not-allowed"
-                              title="Waiting Approval"
-                            >
-                              <Clock size={12} />
-                              In Review
-                            </button>
+                            <span className="text-[10px] font-medium text-amber-700">In Review</span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItem(item.id, item.wpp_number || item.no_faktur)}
-                            className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Item"
-                          >
-                            <Trash2 size={15} />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -424,53 +346,20 @@ export default function StatusApprovalPage() {
 
         {/* Pagination */}
         {filteredItems.length > 0 && (
-          <div className="p-4 border-t border-stone-100 flex items-center justify-between text-xs text-stone-500 font-normal">
-            <div>
-              Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filteredItems.length)} of {filteredItems.length} items
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronsLeft size={14} />
-              </button>
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span className="px-3 py-1 font-semibold text-stone-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronRight size={14} />
-              </button>
-              <button
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronsRight size={14} />
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            currentPage={visiblePage}
+            pageSize={pageSize}
+            totalItems={filteredItems.length}
+            onPageChange={setCurrentPage}
+          />
         )}
       </div>
 
-      {/* EDIT MODAL FOR REJECTED ITEMS */}
       {isEditModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-stone-200 overflow-hidden">
             <div className="p-5 border-b border-stone-100 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-stone-900 uppercase tracking-tight">Edit Rejected Item & Revise</h3>
+              <h3 className="text-sm font-bold text-stone-900 uppercase tracking-tight">Prepare Draft Revision</h3>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
@@ -479,67 +368,70 @@ export default function StatusApprovalPage() {
                 <X size={16} />
               </button>
             </div>
-
-            <div className="p-5 space-y-4 text-xs font-normal">
+            <div className="p-5 space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-stone-600 mb-1">Rejection Reason / Notes:</label>
-                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 font-medium italic">
-                  &quot;{editingItem.reject_reason || 'Needs revision'}&quot;
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900">
+                  {editingItem.reject_reason || 'Needs revision'}
                 </div>
               </div>
-
               <div>
                 <label className="block font-semibold text-stone-600 mb-1">Store Name / Description:</label>
                 <input
                   type="text"
                   value={editingItem.store_name}
-                  onChange={(e) => setEditingItem({ ...editingItem, store_name: e.target.value })}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 uppercase outline-none focus:border-[#55e07e]"
+                  onChange={(event) => setEditingItem({ ...editingItem, store_name: event.target.value })}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-900 outline-none focus:border-amber-500"
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block font-semibold text-stone-600 mb-1">Quantity:</label>
+                <label className="block font-semibold text-stone-600">
+                  Quantity:
                   <input
                     type="number"
                     step="any"
                     value={editingItem.qty}
-                    onChange={(e) => setEditingItem({ ...editingItem, qty: e.target.value })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 outline-none focus:border-[#55e07e]"
+                    onChange={(event) => setEditingItem({ ...editingItem, qty: event.target.value })}
+                    className="mt-1 w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-stone-900 outline-none focus:border-amber-500"
                   />
-                </div>
-                <div>
-                  <label className="block font-semibold text-stone-600 mb-1">Unit Price (Rp):</label>
+                </label>
+                <label className="block font-semibold text-stone-600">
+                  Unit Price (Rp):
                   <input
                     type="number"
                     value={editingItem.unit_price}
-                    onChange={(e) => setEditingItem({ ...editingItem, unit_price: e.target.value })}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono font-bold text-stone-900 outline-none focus:border-[#55e07e]"
+                    onChange={(event) => setEditingItem({ ...editingItem, unit_price: event.target.value })}
+                    className="mt-1 w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-stone-900 outline-none focus:border-amber-500"
                   />
-                </div>
+                </label>
               </div>
             </div>
-
-            <div className="p-4 bg-stone-50 border-t border-stone-100 flex items-center justify-end gap-2 font-normal">
+            <div className="p-4 bg-stone-50 border-t border-stone-100 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl font-semibold hover:bg-stone-100 cursor-pointer"
+                className="px-4 py-2 bg-white border border-stone-200 text-stone-700 rounded-xl font-semibold hover:bg-stone-100"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveEdit}
-                className="px-4 py-2 bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold rounded-xl shadow-xs cursor-pointer"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl"
               >
-                Save & Return to Draft
+                Save as Draft
               </button>
             </div>
           </div>
         </div>
       )}
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        onClose={() => setFeedback(null)}
+      />
     </div>
   );
 }

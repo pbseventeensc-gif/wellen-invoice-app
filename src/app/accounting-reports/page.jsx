@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
+import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
 
 function fmtShort(n) {
   if (!n) return 'Rp 0';
@@ -22,26 +23,22 @@ function fmtShort(n) {
 }
 
 export default function AccountingReportsPage() {
-  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
-  // Data dari localStorage dimuat lewat loadData() di useEffect setelah mount.
+  // Keep the initial state identical on the server and client to prevent hydration mismatch.
+  // Supabase invoice data is loaded after mount.
   const [invoices, setInvoices] = useState([]);
+  const [loadError, setLoadError] = useState('');
   const [role, setRole] = useState('accounting');
   const [periodFilter, setPeriodFilter] = useState('month');
   const [startDate, setStartDate] = useState('2026-09-01');
   const [endDate, setEndDate] = useState('2026-09-30');
 
-  const loadData = () => {
+  const loadData = async () => {
     try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setInvoices(Array.isArray(parsed) ? parsed.filter((it) => !it.id?.startsWith('wpk-default')) : []);
-      } else {
-        setInvoices([]);
-      }
-    } catch (e) {
-      console.error('Failed to load invoice data:', e);
-      setInvoices([]);
+      setInvoices(await listInvoiceWorkflows(['approved']));
+      setLoadError('');
+    } catch (error) {
+      console.error('Failed to load accounting invoices from Supabase:', error);
+      setLoadError('Approved invoice data could not be loaded from the shared database.');
     }
   };
 
@@ -49,8 +46,12 @@ export default function AccountingReportsPage() {
     // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
-    window.addEventListener('storage', loadData);
-    return () => window.removeEventListener('storage', loadData);
+    window.addEventListener('wellen-invoice-workflows', loadData);
+    window.addEventListener('focus', loadData);
+    return () => {
+      window.removeEventListener('wellen-invoice-workflows', loadData);
+      window.removeEventListener('focus', loadData);
+    };
   }, []);
 
   const totalOmzetVal = useMemo(() => {
@@ -156,6 +157,11 @@ export default function AccountingReportsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans text-stone-900 antialiased">
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {loadError}
+        </div>
+      )}
       {/* Header Navigasi */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-stone-200/80 gap-3">
         <div>
@@ -303,7 +309,7 @@ export default function AccountingReportsPage() {
             <button
               type="button"
               onClick={handleExport}
-              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shadow-2xs cursor-pointer"
             >
               <Download size={13} />
               Export

@@ -1,9 +1,9 @@
 // Role-Based Access Control (RBAC) Permissions Configuration
-// All pages are accessible to both Admin and User during testing
 
 const ALL_MODULE_PAGES = [
   '/',
   '/import',
+  '/master-pos',
   '/create-invoice',
   '/approval',
   '/status-approval',
@@ -19,15 +19,34 @@ export const ROLE_PERMISSIONS = {
     label: 'Super Admin',
   },
   'ar created': {
-    allowedPages: ALL_MODULE_PAGES,
+    allowedPages: [
+      '/',
+      '/import',
+      '/master-pos',
+      '/create-invoice',
+      '/invoices',
+      '/status-approval',
+    ],
     label: 'AR Creator',
   },
   'approval': {
-    allowedPages: ALL_MODULE_PAGES,
+    allowedPages: [
+      '/',
+      '/approval',
+      '/invoices',
+      '/approved-invoices',
+      '/status-approval',
+    ],
     label: 'Approval Manager',
   },
   'accounting': {
-    allowedPages: ALL_MODULE_PAGES,
+    allowedPages: [
+      '/',
+      '/invoices',
+      '/approved-invoices',
+      '/accounting-reports',
+      '/efaktur-export',
+    ],
     label: 'Accounting & Tax',
   },
 };
@@ -36,19 +55,22 @@ export const ROLE_PERMISSIONS = {
  * Normalisasi string role ke format standar
  */
 export function normalizeRole(roleStr) {
-  if (!roleStr) return 'super admin';
-  const clean = String(roleStr).trim().toLowerCase();
-  if (clean.includes('super') || clean.includes('admin')) return 'super admin';
-  if (clean.includes('approval') || clean.includes('manager') || clean.includes('lead')) return 'approval';
-  if (clean.includes('account') || clean.includes('tax') || clean.includes('pajak')) return 'accounting';
-  if (clean.includes('ar') || clean.includes('created') || clean.includes('creator') || clean.includes('staff')) return 'ar created';
-  return 'super admin';
+  if (!roleStr) return null;
+  const clean = String(roleStr).trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+  if (['super admin', 'superadmin', 'administrator', 'admin'].includes(clean)) return 'super admin';
+  if (['approval', 'approval manager', 'approver'].includes(clean)) return 'approval';
+  if (['accounting', 'accounting tax', 'accounting & tax', 'tax', 'pajak'].includes(clean)) return 'accounting';
+  if (['ar created', 'ar creator', 'creator', 'staff'].includes(clean)) return 'ar created';
+  return null;
 }
 
 /**
  * Cek apakah role diizinkan mengakses path URL tertentu
- * Untuk testing: semua halaman dibuka sama persis untuk admin dan user
  */
 export function isRouteAllowed(role, pathname) {
-  return true;
+  const normalizedRole = normalizeRole(role);
+  const permissions = normalizedRole ? ROLE_PERMISSIONS[normalizedRole] : null;
+  const normalizedPath = pathname === '/' ? pathname : pathname.replace(/\/+$/, '');
+
+  return Boolean(permissions?.allowedPages.includes(normalizedPath));
 }

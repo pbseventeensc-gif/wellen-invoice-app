@@ -65,7 +65,7 @@ export default function FilterToolbar({
       {/* Tombol Download Report Excel */}
       <button
         onClick={onExportExcel}
-        className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+        className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm"
       >
         <FileSpreadsheet size={16} />
         Report by Excel

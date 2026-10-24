@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
         {/* Notifikasi Berhasil */}
         {success ? (
           <div className="space-y-4 text-center">
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-400">
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-700">
               <CheckCircle2 size={28} />
               <p className="text-xs font-semibold">Tautan Terkirim!</p>
               <p className="text-[11px] text-stone-300">

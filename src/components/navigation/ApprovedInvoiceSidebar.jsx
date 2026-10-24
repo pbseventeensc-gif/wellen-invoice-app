@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle2, X, Search, Printer, FileText } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
 import PrintModal from '@/components/invoice-print/PrintModal';
-
-const DEFAULT_APPROVED_INVOICES = [];
+import { listInvoiceWorkflows, markInvoiceWorkflowPrinted } from '@/utils/invoiceWorkflow';
 
 export default function ApprovedInvoiceSidebar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,21 +15,11 @@ export default function ApprovedInvoiceSidebar() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  const loadApprovedInvoices = () => {
+  const loadApprovedInvoices = async () => {
     try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter((it) => !it.id?.startsWith('wpk-default'));
-          setApprovedList(cleaned);
-          return;
-        }
-      }
-      setApprovedList([]);
-    } catch (e) {
-      console.error(e);
-      setApprovedList([]);
+      setApprovedList(await listInvoiceWorkflows(['approved']));
+    } catch (error) {
+      console.error('Failed to load approved invoices in sidebar:', error);
     }
   };
 
@@ -42,6 +31,7 @@ export default function ApprovedInvoiceSidebar() {
     };
 
     window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('wellen-invoice-workflows', handleStorageUpdate);
     window.addEventListener('open-approved-drawer', handleOpenTrigger);
 
     // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
@@ -50,6 +40,7 @@ export default function ApprovedInvoiceSidebar() {
 
     return () => {
       window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('wellen-invoice-workflows', handleStorageUpdate);
       window.removeEventListener('open-approved-drawer', handleOpenTrigger);
     };
   }, []);
@@ -183,16 +174,13 @@ export default function ApprovedInvoiceSidebar() {
         invoice={selectedInvoice}
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
-        onPrintConfirmed={(id) => {
-          const now = new Date();
-          const pad = (n) => String(n).padStart(2, '0');
-          const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-          const updated = approvedList.map((item) =>
-            item.id === id ? { ...item, time_download: timeStr } : item
-          );
-          setApprovedList(updated);
-          localStorage.setItem('wellen_invoices', JSON.stringify(updated));
+        onPrintConfirmed={(ids) => {
+          Promise.all((Array.isArray(ids) ? ids : [ids]).map((id) => markInvoiceWorkflowPrinted(id)))
+            .then(() => {
+              window.dispatchEvent(new Event('wellen-invoice-workflows'));
+              return loadApprovedInvoices();
+            })
+            .catch((error) => console.error('Failed to save sidebar print history:', error));
         }}
       />
     </>

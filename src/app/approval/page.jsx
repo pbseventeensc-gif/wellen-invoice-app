@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Check, 
   X, 
@@ -9,13 +10,21 @@ import {
   CheckCircle2, 
   Trash2, 
   Search,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
-import { supabase } from '@/lib/supabase';
-
-const INITIAL_APPROVAL_QUEUE = [];
+import FeedbackDialog from '@/components/ui/FeedbackDialog';
+import PrintModal from '@/components/invoice-print/PrintModal';
+import {
+  approveInvoiceWorkflow,
+  clearWaitingInvoiceWorkflows,
+  listInvoiceWorkflows,
+  markInvoiceWorkflowPrinted,
+  rejectInvoiceWorkflow,
+  removeWaitingInvoiceWorkflow,
+} from '@/utils/invoiceWorkflow';
 
 export default function ApprovalPage() {
   // Initial state harus identik antara server & client untuk mencegah hydration mismatch.
@@ -23,77 +32,26 @@ export default function ApprovalPage() {
   const [queue, setQueue] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [profile, setProfile] = useState({ name: 'RISCA', role: 'Approval' });
+  const [feedback, setFeedback] = useState(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Reject Modal State
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const testingUser = typeof window !== 'undefined' ? localStorage.getItem('wellen_testing_user') : null;
-        const activeEmail = (user?.email || testingUser || '').toLowerCase();
-
-        let defaultName = 'RISCA';
-        let defaultRole = 'Approval';
-
-        if (activeEmail.includes('tanita')) {
-          defaultName = 'TANITA';
-          defaultRole = 'Approval';
-        } else if (activeEmail.includes('fahada')) {
-          defaultName = 'FAHADA';
-          defaultRole = 'AR Created';
-        } else if (activeEmail.includes('keyjia')) {
-          defaultName = 'KEYJIA';
-          defaultRole = 'AR Created';
-        }
-
-        if (user) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('full_name, role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          setProfile({
-            name: data?.full_name || defaultName,
-            role: data?.role || defaultRole,
-          });
-        } else {
-          setProfile({
-            name: defaultName,
-            role: defaultRole,
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load profile for signature:', err);
-      }
-    };
-    loadProfile();
-  }, []);
-
-  const loadQueue = useCallback(() => {
+  const loadQueue = useCallback(async () => {
     try {
-      const stored = localStorage.getItem('wellen_approval_queue');
-      if (stored !== null) {
-        const parsed = JSON.parse(stored);
-        const data = Array.isArray(parsed) ? parsed : [];
-        const cleaned = data.filter((item) => item.id !== 'wpk-1001');
-        setQueue(cleaned);
-        if (cleaned.length > 0) {
-          setSelectedId((prev) => prev || cleaned[0].id);
-        } else {
-          setSelectedId(null);
-        }
-      } else {
-        setQueue([]);
-        setSelectedId(null);
-      }
+      const data = await listInvoiceWorkflows(['waiting_approval']);
+      setQueue(data);
+      setSelectedId((prev) => (data.some((item) => item.id === prev) ? prev : data[0]?.id || null));
     } catch (err) {
-      console.error('Failed to read approval queue:', err);
+      console.error('Failed to load shared approval queue:', err);
+      setFeedback({
+        variant: 'error',
+        title: 'Approval queue could not be loaded',
+        description: 'The shared invoice workflow could not be reached. Check your connection and Supabase access, then retry.',
+      });
       setQueue([]);
     }
   }, []);
@@ -102,61 +60,65 @@ export default function ApprovalPage() {
     // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadQueue();
-    window.addEventListener('storage', loadQueue);
-    return () => window.removeEventListener('storage', loadQueue);
+    window.addEventListener('wellen-invoice-workflows', loadQueue);
+    window.addEventListener('focus', loadQueue);
+    return () => {
+      window.removeEventListener('wellen-invoice-workflows', loadQueue);
+      window.removeEventListener('focus', loadQueue);
+    };
   }, [loadQueue]);
 
   const activeInvoice = queue.find((q) => q.id === selectedId) || queue[0] || null;
 
-  const handleApprove = (invoiceToApprove) => {
+  const handleApprove = async (invoiceToApprove) => {
     if (!invoiceToApprove) return;
-
-    const approvedItem = {
-      ...invoiceToApprove,
-      id: invoiceToApprove.id || `inv-${Date.now()}`,
-      status: 'approved',
-      ar_name: invoiceToApprove.created_by || invoiceToApprove.ar_name || 'FAHADA',
-      approved_by: profile.name || 'RISCA',
-      time_approved: new Date().toISOString().slice(0, 16).replace('T', ' '),
-    };
-
-    let existingInvoices = [];
     try {
-      existingInvoices = JSON.parse(localStorage.getItem('wellen_invoices') || '[]');
-    } catch (e) {
-      existingInvoices = [];
+      await approveInvoiceWorkflow(invoiceToApprove.id);
+    } catch (error) {
+      console.error('Failed to approve shared invoice:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Invoice could not be approved',
+        description: 'The invoice was not approved. It may have already changed status, or this account may not have approval permission.',
+      });
+      loadQueue();
+      return;
     }
-    const updatedInvoices = [
-      approvedItem,
-      ...existingInvoices.filter((inv) => inv.id !== approvedItem.id),
-    ];
-    localStorage.setItem('wellen_invoices', JSON.stringify(updatedInvoices));
 
     try {
       const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const itemFakturSet = new Set(
-        invoiceToApprove.items?.map((it) => it.no_faktur || it.wpp_number).filter(Boolean)
+      const itemIds = new Set(invoiceToApprove.items?.map((item) => item.id).filter(Boolean));
+      const sourceNumbers = new Set(
+        (invoiceToApprove.items || [])
+          .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
+          .map((number) => String(number || '').trim().toLowerCase())
+          .filter(Boolean)
       );
 
       const updatedStaging = existingStaging.map((wpp) => {
-        const wppNo = wpp.no_faktur || wpp.wpp_number;
-        if (itemFakturSet.has(wppNo)) {
-          return { ...wpp, status: 'invoiced' };
+        const wppNumbers = [wpp.source_no_wpp, wpp.wpp_number, wpp.no_faktur]
+          .map((number) => String(number || '').trim().toLowerCase())
+          .filter(Boolean);
+        if (itemIds.has(wpp.id) || wppNumbers.some((number) => sourceNumbers.has(number))) {
+          return { ...wpp, status: 'approved' };
         }
         return wpp;
       });
       localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-    } catch (e) {
-      console.error('Failed to sync staging invoice:', e);
+    } catch (error) {
+      console.error('Failed to sync local staging after approval:', error);
     }
 
     const nextQueue = queue.filter((q) => q.id !== invoiceToApprove.id);
     setQueue(nextQueue);
-    localStorage.setItem('wellen_approval_queue', JSON.stringify(nextQueue));
-    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('wellen-invoice-workflows'));
 
     setSelectedId(nextQueue.length > 0 ? nextQueue[0].id : null);
-    alert(`Invoice ${invoiceToApprove.invoice_number} successfully approved!`);
+    setFeedback({
+      variant: 'success',
+      title: 'Invoice approved',
+      description: `Invoice ${invoiceToApprove.invoice_number} is now available in Invoices with Approved status.`,
+    });
   };
 
   const openRejectModal = (invoiceId) => {
@@ -165,37 +127,43 @@ export default function ApprovalPage() {
     setIsRejectModalOpen(true);
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!rejectTargetId) return;
     const targetInvoice = queue.find((q) => q.id === rejectTargetId);
 
     if (targetInvoice) {
-      const rejectedItem = {
-        ...targetInvoice,
-        status: 'rejected',
-        reject_reason: rejectReasonText || 'Needs revision',
-        time_rejected: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      };
       try {
-        const existingRejected = JSON.parse(localStorage.getItem('wellen_rejected_invoices') || '[]');
-        localStorage.setItem('wellen_rejected_invoices', JSON.stringify([rejectedItem, ...existingRejected]));
-      } catch (e) {
-        console.error('Failed to save rejected invoice:', e);
+        await rejectInvoiceWorkflow(targetInvoice.id, rejectReasonText || 'Needs revision');
+      } catch (error) {
+        console.error('Failed to reject shared invoice:', error);
+        setFeedback({
+          variant: 'error',
+          title: 'Invoice could not be rejected',
+          description: 'The status was not changed. It may have already moved from the approval queue.',
+        });
+        loadQueue();
+        return;
       }
 
       try {
         const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-        const rejectedFakturSet = new Set(
-          targetInvoice.items?.map((it) => it.no_faktur || it.wpp_number).filter(Boolean)
+        const rejectedItemIds = new Set(targetInvoice.items?.map((item) => item.id).filter(Boolean));
+        const rejectedSourceNumbers = new Set(
+          (targetInvoice.items || [])
+            .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
+            .map((number) => String(number || '').trim().toLowerCase())
+            .filter(Boolean)
         );
 
-        if (rejectedFakturSet.size === 0 && targetInvoice.invoice_number) {
-          rejectedFakturSet.add(targetInvoice.invoice_number);
+        if (rejectedSourceNumbers.size === 0 && targetInvoice.invoice_number) {
+          rejectedSourceNumbers.add(String(targetInvoice.invoice_number).trim().toLowerCase());
         }
 
         const updatedStaging = existingStaging.map((wpp) => {
-          const wppNo = wpp.no_faktur || wpp.wpp_number;
-          if (rejectedFakturSet.has(wppNo)) {
+          const wppNumbers = [wpp.source_no_wpp, wpp.wpp_number, wpp.no_faktur]
+            .map((number) => String(number || '').trim().toLowerCase())
+            .filter(Boolean);
+          if (rejectedItemIds.has(wpp.id) || wppNumbers.some((number) => rejectedSourceNumbers.has(number))) {
             return { 
               ...wpp, 
               status: 'rejected', 
@@ -205,43 +173,61 @@ export default function ApprovalPage() {
           return wpp;
         });
         localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-      } catch (e) {
-        console.error('Failed to update reject status to staging:', e);
+      } catch (error) {
+        console.error('Failed to sync local staging after rejection:', error);
       }
     }
 
     const nextQueue = queue.filter((q) => q.id !== rejectTargetId);
     setQueue(nextQueue);
-    localStorage.setItem('wellen_approval_queue', JSON.stringify(nextQueue));
-    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('wellen-invoice-workflows'));
 
     setSelectedId(nextQueue.length > 0 ? nextQueue[0].id : null);
     setIsRejectModalOpen(false);
     setRejectTargetId(null);
-    alert('Invoice rejected and returned to Invoice List.');
+    setFeedback({
+      variant: 'success',
+      title: 'Invoice returned for revision',
+      description: 'The invoice was rejected and returned to the Invoice List.',
+    });
   };
 
-  const handleDeleteQueueItem = (id, invoiceNumber, e) => {
+  const handleDeleteQueueItem = async (id, invoiceNumber, e) => {
     e.stopPropagation();
     if (confirm(`Delete invoice ${invoiceNumber} from approval queue?`)) {
-      const nextQueue = queue.filter((q) => q.id !== id);
-      setQueue(nextQueue);
-      localStorage.setItem('wellen_approval_queue', JSON.stringify(nextQueue));
-      window.dispatchEvent(new Event('storage'));
-
-      if (selectedId === id) {
-        setSelectedId(nextQueue.length > 0 ? nextQueue[0].id : null);
+      try {
+        await removeWaitingInvoiceWorkflow(id);
+        const nextQueue = queue.filter((q) => q.id !== id);
+        setQueue(nextQueue);
+        window.dispatchEvent(new Event('wellen-invoice-workflows'));
+        if (selectedId === id) setSelectedId(nextQueue[0]?.id || null);
+      } catch (error) {
+        console.error('Failed to remove invoice from approval queue:', error);
+        setFeedback({
+          variant: 'error',
+          title: 'Invoice could not be removed',
+          description: 'The invoice was not deleted. Refresh the queue and check its current status.',
+        });
       }
     }
   };
 
-  const handleDeleteAllQueue = () => {
+  const handleDeleteAllQueue = async () => {
     if (queue.length === 0) return;
     if (confirm(`Delete ALL (${queue.length}) items from approval queue?`)) {
-      setQueue([]);
-      setSelectedId(null);
-      localStorage.setItem('wellen_approval_queue', JSON.stringify([]));
-      window.dispatchEvent(new Event('storage'));
+      try {
+        await clearWaitingInvoiceWorkflows();
+        setQueue([]);
+        setSelectedId(null);
+        window.dispatchEvent(new Event('wellen-invoice-workflows'));
+      } catch (error) {
+        console.error('Failed to clear shared approval queue:', error);
+        setFeedback({
+          variant: 'error',
+          title: 'Approval queue could not be cleared',
+          description: 'No invoices were removed. Verify your Super Admin role and try again.',
+        });
+      }
     }
   };
 
@@ -274,7 +260,7 @@ export default function ApprovalPage() {
                 placeholder="Search WPK invoice or Client..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-[#55e07e] text-stone-800 placeholder:text-stone-400 font-normal"
+                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-800 placeholder:text-stone-400 font-normal"
               />
             </div>
 
@@ -303,6 +289,9 @@ export default function ApprovalPage() {
                 <div className="p-10 text-center text-stone-400 space-y-2 font-normal">
                   <CheckCircle2 size={32} className="mx-auto text-emerald-500/80" />
                   <p className="text-xs font-medium text-stone-600">No active approval queue items.</p>
+                  <Link href="/invoices" className="inline-flex text-xs font-semibold text-amber-700 hover:text-amber-900">
+                    View Invoices
+                  </Link>
                 </div>
               ) : (
                 filteredQueue.map((item) => {
@@ -313,7 +302,7 @@ export default function ApprovalPage() {
                       onClick={() => setSelectedId(item.id)}
                       className={`p-3.5 transition-colors cursor-pointer flex items-center justify-between gap-3 ${
                         isSelected 
-                          ? 'bg-[#55e07e]/10 border-l-4 border-l-[#55e07e]'
+                          ? 'bg-emerald-50 border-l-4 border-l-emerald-500'
                           : 'hover:bg-stone-50/80'
                       }`}
                     >
@@ -322,7 +311,7 @@ export default function ApprovalPage() {
                           <span className={`font-mono text-xs font-bold ${isSelected ? 'text-stone-900' : 'text-stone-900'}`}>
                             {item.invoice_number}
                           </span>
-                          <span className="text-[9px] font-semibold bg-[#55e07e]/20 text-stone-900 px-1.5 py-0.2 rounded-md">
+                          <span className="text-[9px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-md">
                             Review
                           </span>
                         </div>
@@ -371,6 +360,14 @@ export default function ApprovalPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                  >
+                    <Printer size={14} />
+                    Print Invoice
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => openRejectModal(activeInvoice.id)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition-colors cursor-pointer"
                   >
@@ -380,7 +377,7 @@ export default function ApprovalPage() {
                   <button
                     type="button"
                     onClick={() => handleApprove(activeInvoice)}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#55e07e] hover:bg-[#42ce6b] text-stone-950 font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
                   >
                     <Check size={14} />
                     Approve
@@ -627,6 +624,11 @@ export default function ApprovalPage() {
 
                       <div className="w-48 border-b border-black z-10"></div>
                       <p className="text-[11px] text-black font-bold mt-1 z-10">Authorized Sign,</p>
+                      {activeInvoice?.approved_by && (
+                        <p className="text-[11px] text-black font-bold mt-0.5 z-10">
+                          {activeInvoice.approved_by}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -720,6 +722,30 @@ export default function ApprovalPage() {
           </div>
         </div>
       )}
+      <FeedbackDialog
+        open={Boolean(feedback)}
+        variant={feedback?.variant}
+        title={feedback?.title}
+        description={feedback?.description}
+        onClose={() => setFeedback(null)}
+      />
+      <PrintModal
+        invoice={activeInvoice}
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        onPrintConfirmed={(ids) => {
+          Promise.all(ids.map((id) => markInvoiceWorkflowPrinted(id)))
+            .then(() => window.dispatchEvent(new Event('wellen-invoice-workflows')))
+            .catch((error) => {
+              console.error('Failed to save approval invoice print timestamp:', error);
+              setFeedback({
+                variant: 'error',
+                title: 'Print status could not be saved',
+                description: 'The invoice may have printed, but its print history was not recorded.',
+              });
+            });
+        }}
+      />
     </div>
   );
 }

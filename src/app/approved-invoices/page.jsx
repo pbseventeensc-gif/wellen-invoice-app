@@ -14,42 +14,24 @@ import {
   CreditCard,
   History,
   X,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatRupiah } from '@/utils/taxCalculator';
+import { normalizeRole } from '@/config/permissions';
+import { supabase } from '@/lib/supabase';
 import PrintModal from '@/components/invoice-print/PrintModal';
-
-const DEFAULT_APPROVED = [];
+import TablePagination from '@/components/ui/TablePagination';
+import {
+  deleteApprovedInvoiceWorkflow,
+  listInvoiceWorkflows,
+  markInvoiceWorkflowPrinted,
+  setInvoicePaymentStatus,
+} from '@/utils/invoiceWorkflow';
 
 export default function ApprovedInvoicesPage() {
-  // Membaca invoice dari localStorage (sekaligus membersihkan sampel lama).
-  // Hanya dipanggil di client setelah mount untuk mencegah hydration mismatch.
-  const getStoredInvoices = () => {
-    try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored !== null) {
-        const parsed = JSON.parse(stored);
-        const dataList = Array.isArray(parsed) ? parsed : [];
-        // Hapus sampel invoice lama jika tersisa di browser
-        const cleaned = dataList.filter((item) => !item.id?.startsWith('wpk-default'));
-        if (cleaned.length !== dataList.length) {
-          localStorage.setItem('wellen_invoices', JSON.stringify(cleaned));
-        }
-        return Array.from(
-          new Map(cleaned.map((item) => [item.id || item.invoice_number, item])).values()
-        );
-      }
-      return [];
-    } catch (e) {
-      console.error('Failed to load invoices:', e);
-      return [];
-    }
-  };
   const [invoices, setInvoices] = useState([]);
+  const [loadError, setLoadError] = useState('');
+  const [role, setRole] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState('ALL');
   const [selectedCreator, setSelectedCreator] = useState('ALL');
@@ -62,34 +44,52 @@ export default function ApprovedInvoicesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const loadInvoices = () => {
+  const loadInvoices = async () => {
     try {
-      const stored = localStorage.getItem('wellen_invoices');
-      if (stored !== null) {
-        const parsed = JSON.parse(stored);
-        const dataList = Array.isArray(parsed) ? parsed : [];
-        const cleaned = dataList.filter((item) => !item.id?.startsWith('wpk-default'));
-        
-        const uniqueInvoices = Array.from(
-          new Map(cleaned.map((item) => [item.id || item.invoice_number, item])).values()
-        );
-
-        setInvoices(uniqueInvoices);
-      } else {
-        setInvoices([]);
-      }
-    } catch (e) {
-      console.error('Failed to load invoices:', e);
-      setInvoices([]);
+      setInvoices(await listInvoiceWorkflows(['approved']));
+      setLoadError('');
+    } catch (error) {
+      console.error('Failed to load approved invoices from Supabase:', error);
+      setLoadError('Approved invoices could not be loaded from the shared database. Check your connection and access.');
     }
   };
 
   useEffect(() => {
-    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setInvoices(getStoredInvoices());
-    window.addEventListener('storage', loadInvoices);
-    return () => window.removeEventListener('storage', loadInvoices);
+    const loadTimer = window.setTimeout(loadInvoices, 0);
+    window.addEventListener('wellen-invoice-workflows', loadInvoices);
+    window.addEventListener('focus', loadInvoices);
+    return () => {
+      window.clearTimeout(loadTimer);
+      window.removeEventListener('wellen-invoice-workflows', loadInvoices);
+      window.removeEventListener('focus', loadInvoices);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadRole = async () => {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('Failed to verify approved-invoice permissions:', authError);
+        return;
+      }
+      if (!user) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) {
+        console.error('Failed to verify approved-invoice permissions:', error);
+        setLoadError('Account permissions could not be verified; administrative actions are unavailable.');
+        return;
+      }
+      if (isMounted) setRole(normalizeRole(data?.role));
+    };
+    loadRole();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const clientList = ['ALL', ...Array.from(new Set(invoices.map((inv) => inv.client_name).filter(Boolean)))];
@@ -146,10 +146,11 @@ export default function ApprovedInvoicesPage() {
   }, [invoices, searchTerm, selectedClient, selectedCreator, sortField, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
+  const visiblePage = Math.min(currentPage, totalPages);
   const paginatedInvoices = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
+    const start = (visiblePage - 1) * pageSize;
     return filteredInvoices.slice(start, start + pageSize);
-  }, [filteredInvoices, currentPage, pageSize]);
+  }, [filteredInvoices, visiblePage, pageSize]);
 
   const pendingDownloadCount = invoices.filter((inv) => !inv.time_download).length;
   const totalRevenue = filteredInvoices.reduce((sum, it) => sum + Number(it.grand_total || it.grandTotal || 0), 0);
@@ -160,26 +161,21 @@ export default function ApprovedInvoicesPage() {
   const paidTotal = paidInvoices.reduce((sum, i) => sum + Number(i.grand_total || i.grandTotal || 0), 0);
   const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.grand_total || i.grandTotal || 0), 0);
 
-  const handleTogglePaymentStatus = (id) => {
+  const handleTogglePaymentStatus = async (id) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
-    const updated = invoices.map((inv) => {
-      if (inv.id === id) {
-        const isCurrentlyPaid = inv.payment_status === 'paid';
-        return {
-          ...inv,
-          payment_status: isCurrentlyPaid ? 'unpaid' : 'paid',
-          payment_date: isCurrentlyPaid ? null : todayStr,
-        };
-      }
-      return inv;
-    });
-
-    setInvoices(updated);
-    localStorage.setItem('wellen_invoices', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
+    const target = invoices.find((invoice) => invoice.id === id);
+    if (!target) return;
+    const isPaid = target.payment_status !== 'paid';
+    try {
+      await setInvoicePaymentStatus(id, isPaid, isPaid ? todayStr : null);
+      await loadInvoices();
+    } catch (error) {
+      console.error('Failed to update invoice payment status:', error);
+      setLoadError('Payment status could not be saved. Verify that your account has accounting permission.');
+    }
   };
 
   const [selectedAuditInvoice, setSelectedAuditInvoice] = useState(null);
@@ -211,12 +207,15 @@ export default function ApprovedInvoicesPage() {
     XLSX.writeFile(workbook, `Approved_Invoices_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
-  const handleDeleteInvoice = (id, invoiceNumber) => {
+  const handleDeleteInvoice = async (id, invoiceNumber) => {
     if (confirm(`Delete invoice ${invoiceNumber}? Deleted data cannot be recovered.`)) {
-      const updated = invoices.filter((inv) => inv.id !== id);
-      setInvoices(updated);
-      localStorage.setItem('wellen_invoices', JSON.stringify(updated));
-      window.dispatchEvent(new Event('storage'));
+      try {
+        await deleteApprovedInvoiceWorkflow(id);
+        await loadInvoices();
+      } catch (error) {
+        console.error('Failed to delete approved invoice:', error);
+        setLoadError('Invoice could not be deleted. Verify Super Admin permission and current invoice status.');
+      }
     }
   };
 
@@ -231,6 +230,11 @@ export default function ApprovedInvoicesPage() {
               {filteredInvoices.length} Documents
             </span>
           </div>
+          {loadError && (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {loadError}
+            </div>
+          )}
           <p className="text-xs text-stone-500 mt-1 font-normal">
             Complete list of all approved invoices, ready for A4 physical printing and data export.
           </p>
@@ -238,7 +242,7 @@ export default function ApprovedInvoicesPage() {
 
         <button
           onClick={handleExportExcel}
-          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-normal px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white font-normal px-3.5 py-2 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
         >
           <FileSpreadsheet size={14} />
           <span>Export Excel</span>
@@ -357,8 +361,8 @@ export default function ApprovedInvoicesPage() {
 
       {/* Tabel Lengkap Approved Invoices */}
       <div className="bg-white rounded-2xl border border-stone-200/80 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="data-table-scroll">
+          <table className="data-table w-full text-left text-xs border-collapse">
             <thead className="bg-stone-50 text-stone-500 uppercase font-normal text-[10px] border-b border-stone-200 tracking-wider">
               <tr>
                 <th className="py-3.5 px-4 text-center w-12 font-normal">NO</th>
@@ -450,7 +454,7 @@ export default function ApprovedInvoicesPage() {
                 </tr>
               ) : (
                 paginatedInvoices.map((row, idx) => {
-                  const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                  const globalIdx = (visiblePage - 1) * pageSize + idx + 1;
                   return (
                     <tr key={row.id || idx} className="hover:bg-[#578ef5]/10 transition-colors font-normal">
                       <td className="py-3.5 px-4 text-center text-stone-400 font-mono">{globalIdx}</td>
@@ -538,14 +542,16 @@ export default function ApprovedInvoicesPage() {
                           >
                             <Printer size={14} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteInvoice(row.id, row.invoice_number)}
-                            className="p-1.5 bg-stone-100 hover:bg-rose-500 hover:text-white text-stone-400 rounded-lg transition-colors cursor-pointer"
-                            title="Delete Document"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {role === 'super admin' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteInvoice(row.id, row.invoice_number)}
+                              className="p-1.5 bg-stone-100 hover:bg-rose-500 hover:text-white text-stone-400 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Document"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -558,91 +564,17 @@ export default function ApprovedInvoicesPage() {
 
         {/* Footer Pagination Bar */}
         {filteredInvoices.length > 0 && (
-          <div className="p-4 bg-stone-50/80 border-t border-stone-200/80 rounded-b-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-600">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label htmlFor="approved-page-size" className="font-medium text-stone-500">Tampilkan per halaman:</label>
-                <select
-                  id="approved-page-size"
-                  name="pageSize"
-                  aria-label="Tampilkan per halaman"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-bold text-stone-800 focus:outline-none focus:border-[#578ef5] cursor-pointer shadow-2xs"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-
-              <span className="text-stone-500 font-medium">
-                Halaman <strong className="font-mono text-stone-900 font-bold">{currentPage}</strong> dari{' '}
-                <strong className="font-mono text-stone-900 font-bold">{totalPages}</strong>{' '}
-                <span className="text-stone-400 font-mono">({filteredInvoices.length} total data)</span>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(1)}
-                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-                title="Halaman Pertama"
-              >
-                <ChevronsLeft size={15} />
-              </button>
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-                title="Halaman Sebelumnya"
-              >
-                <ChevronLeft size={15} />
-              </button>
-
-              <div className="flex items-center gap-1 px-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((page) => {
-                    return page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1;
-                  })
-                  .map((page, index, array) => {
-                    const showEllipsis = index > 0 && page - array[index - 1] > 1;
-                    return (
-                      <div key={page} className="flex items-center gap-1">
-                        {showEllipsis && <span className="px-1 text-stone-400 font-mono">...</span>}
-                        <button
-                          type="button"
-                          onClick={() => setCurrentPage(page)}
-                          className={`w-7 h-7 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
-                            currentPage === page
-                              ? 'bg-[#578ef5] text-white shadow-2xs'
-                              : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-50'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
-
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(totalPages)}
-                className="p-1.5 bg-white border border-stone-200 rounded-lg hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed text-stone-700 transition cursor-pointer shadow-2xs"
-                title="Halaman Terakhir"
-              >
-                <ChevronsRight size={15} />
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            currentPage={visiblePage}
+            pageSize={pageSize}
+            totalItems={filteredInvoices.length}
+            onPageChange={setCurrentPage}
+            pageSizeOptions={[10, 25, 50]}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
         )}
       </div>
 
@@ -706,24 +638,16 @@ export default function ApprovedInvoicesPage() {
           isOpen={isPrintModalOpen}
           onClose={() => setIsPrintModalOpen(false)}
           invoice={selectedInvoice}
-          onPrintConfirmed={(id) => {
-            const now = new Date();
-            const pad = (n) => String(n).padStart(2, '0');
-            const timestampStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-            const updated = invoices.map((inv) => {
-              if (inv.id === id || inv.invoice_number === id) {
-                return {
-                  ...inv,
-                  time_download: inv.time_download || timestampStr,
-                };
-              }
-              return inv;
-            });
-
-            setInvoices(updated);
-            localStorage.setItem('wellen_invoices', JSON.stringify(updated));
-            window.dispatchEvent(new Event('storage'));
+          onPrintConfirmed={(ids) => {
+            Promise.all((Array.isArray(ids) ? ids : [ids]).map((id) => markInvoiceWorkflowPrinted(id)))
+              .then(() => {
+                window.dispatchEvent(new Event('wellen-invoice-workflows'));
+                return loadInvoices();
+              })
+              .catch((error) => {
+                console.error('Failed to save approved invoice print history:', error);
+                setLoadError('The invoice may have printed, but the print history could not be saved.');
+              });
           }}
         />
       )}

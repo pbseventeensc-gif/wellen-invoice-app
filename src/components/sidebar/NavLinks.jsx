@@ -10,9 +10,42 @@ import {
   BarChart3,
   PieChart 
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { isRouteAllowed } from '@/config/permissions';
 
 export default function NavLinks() {
   const pathname = usePathname();
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadRole = async () => {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('Failed to load navigation role:', authError);
+        return;
+      }
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) {
+        console.error('Failed to load navigation role:', error);
+        return;
+      }
+      if (isMounted) setRole(data?.role || null);
+    };
+
+    loadRole();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const menuItems = [
     { label: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -25,7 +58,7 @@ export default function NavLinks() {
 
   return (
     <nav className="p-4 space-y-1 relative z-10">
-      {menuItems.map((item) => {
+      {menuItems.filter((item) => isRouteAllowed(role, item.href)).map((item) => {
         const Icon = item.icon;
         const isActive = pathname === item.href;
         return (

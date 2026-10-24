@@ -1,8 +1,170 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: var(--font-inter), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-inter), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-amber-50: #fff4e8;
+  --color-amber-100: #ffead7;
+  --color-amber-200: #ffd3ad;
+  --color-amber-300: #ffb777;
+  --color-amber-400: #fa8d3d;
+  --color-amber-500: #e76d13;
+  --color-amber-600: #cc5708;
+  --color-amber-700: #ad4508;
+  --color-amber-800: #89370d;
+  --color-amber-900: #6f2e0f;
   --color-brand: #578ef5;
   --color-brand-hover: #4378e6;
   --color-brand-light: #f0f5fe;
   --color-brand-border: #d4e2fd;
+}
+
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-scroll {
+  max-height: min(40vh, 520px);
+  overflow: auto;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f5f5f4;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.35;
+}
+
+.print-modal-card {
+  width: 210mm;
+  max-width: calc(100vw - 2rem);
+  background: #e7e5e4;
+}
+
+#print-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  background: #e7e5e4;
+}
+
+.print-sheet {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  box-sizing: border-box;
+  padding: 12mm 14mm;
+  background: #fff;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 14%);
+}
+
+.print-sheet-body {
+  width: 100%;
+}
+
+.print-density-short .print-letterhead-logo {
+  width: 1.75rem;
+  height: 2.25rem;
+}
+
+.print-density-short .print-letterhead-brand {
+  font-size: 1.125rem;
+}
+
+.print-density-short .print-letterhead-service,
+.print-density-short .print-letterhead-contact {
+  font-size: 0.6875rem;
+}
+
+.print-density-short .print-sheet-body table thead tr:first-child th {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.print-density-short .print-sheet-body table thead tr:nth-child(2) th {
+  font-size: 0.6875rem;
+}
+
+.print-density-short .print-sheet-body table thead tr:last-child th {
+  font-size: 0.875rem;
+}
+
+.print-density-short .print-sheet-body table {
+  font-size: 0.875rem;
+}
+
+.print-density-short .print-sheet-body table thead th {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.print-density-short .print-sheet-body table tbody td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.print-density-short .invoice-print-footer {
+  padding-top: 1.5rem;
+  margin-top: 12mm !important;
+}
+
+.print-density-short .invoice-print-footer > .grid {
+  gap: 1.5rem;
+}
+
+.print-density-medium .print-sheet-body table tbody td {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+.print-density-medium .print-letterhead-logo {
+  width: 1.5rem;
+  height: 2rem;
+}
+
+.print-density-medium .print-letterhead-brand {
+  font-size: 1rem;
+}
+
+.print-density-medium .print-letterhead-service,
+.print-density-medium .print-letterhead-contact {
+  font-size: 0.625rem;
+}
+
+@media print {
+  .print-modal-card {
+    max-width: none !important;
+    background: #fff !important;
+  }
+
+  #print-area {
+    display: block !important;
+    background: #fff !important;
+  }
+
+  .print-sheet {
+    display: block;
+    width: 210mm;
+    max-width: none !important;
+    min-height: 0;
+    padding: 12mm 14mm;
+    box-shadow: none;
+  }
+
+  .print-sheet.print-density-short {
+    display: flex;
+    flex-direction: column;
+    min-height: 297mm;
+  }
+
+  .print-sheet.print-density-short .invoice-print-footer {
+    margin-top: auto;
+  }
 }
