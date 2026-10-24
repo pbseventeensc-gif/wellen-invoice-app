@@ -32,6 +32,9 @@ export const ROLE_PERMISSIONS = {
   'approval': {
     allowedPages: [
       '/',
+      '/import',
+      '/master-pos',
+      '/create-invoice',
       '/approval',
       '/invoices',
       '/approved-invoices',

@@ -30,7 +30,7 @@ Page access is restricted by role:
 | --- | --- |
 | Super Admin | All application pages |
 | AR Creator | Dashboard, Import, Master POS / Draft, Create Invoice, Invoice List, Status Approval |
-| Approval Manager | Dashboard, Approval Queue, Invoice List, Approved Invoices, Status Approval |
+| Approval Manager | Dashboard, Import, Master POS / Draft, Create Invoice, Approval Queue, Invoice List, Approved Invoices, Status Approval |
 | Accounting & Tax | Dashboard, Invoice List, Approved Invoices, Accounting Reports, e-Faktur Export |
 
 The **Import WPP (Excel)** page parses an Excel recap. Save the parsed rows to
@@ -49,6 +49,12 @@ Supabase migration workflow). The migration expects `public.profiles` to have
 `id`, `role`, and `full_name` columns. It creates the invoice workflow table,
 row-level read policy, and role-checked RPCs for submission, approval,
 rejection, printing, payment updates, and deletion.
+
+Approval Managers may import POS/PO data and submit invoices for approval.
+Apply the follow-up migration
+[`supabase/migrations/20261024223800_allow_approval_manager_invoice_submission.sql`](./supabase/migrations/20261024223800_allow_approval_manager_invoice_submission.sql)
+after the initial workflow migration; it adds this role to the server-side
+invoice-submission check.
 
 Submitted invoices already stored in browser storage are **not** imported by
 this migration; treat them as untrusted and verify/migrate any required records
