@@ -26,8 +26,9 @@ import { formatRupiah } from '@/utils/taxCalculator';
 
 export default function InvoiceListPage() {
   const router = useRouter();
-  // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
-  // Data dari localStorage dimuat lewat loadData() di useEffect setelah mount.
+
+  // Guard untuk mencegah Hydration Error (#418) antara SSR dan browser Client
+  const [mounted, setMounted] = useState(false);
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -98,8 +99,7 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
-    // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
     loadData();
     window.addEventListener('storage', loadData);
     return () => window.removeEventListener('storage', loadData);
@@ -108,8 +108,10 @@ export default function InvoiceListPage() {
   const getDaysDifference = (importedAtStr) => {
     if (!importedAtStr) return 0;
     const importedTime = new Date(importedAtStr).getTime();
+    if (isNaN(importedTime)) return 0;
     const now = new Date().getTime();
-    return Math.floor((now - importedTime) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((now - importedTime) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
   };
 
   const handleSort = (field) => {
@@ -123,10 +125,8 @@ export default function InvoiceListPage() {
 
   const filteredItems = useMemo(() => {
     return items.filter((it) => {
-      const dateStr = it.import_date || it.imported_at || it.waktu_import;
+      const dateStr = it.waktu_import || it.imported_at || it.import_date;
       const daysOld = getDaysDifference(dateStr);
-
-      if (daysOld > 6) return false;
 
       const term = searchTerm.toLowerCase();
       const matchSearch =
@@ -134,7 +134,7 @@ export default function InvoiceListPage() {
         (it.client_name || '').toLowerCase().includes(term) ||
         (it.item_description || it.store_name || '').toLowerCase().includes(term);
 
-      const normalizedStatus = (it.status === 'draft' || it.status === 'ready' || !it.status) ? 'ready' : it.status;
+      const normalizedStatus = (it.status === 'draft' || it.status === 'ready' || it.status === 'ready_to_process' || !it.status) ? 'ready' : it.status;
       const isWaiting = normalizedStatus === 'waiting' || normalizedStatus === 'waiting_approval';
       const isSlaBreached = isWaiting && daysOld >= 3;
 
@@ -170,7 +170,7 @@ export default function InvoiceListPage() {
   const statusCounts = useMemo(() => {
     let ready = 0, waiting = 0, rejected = 0, slaBreached = 0;
     items.forEach((it) => {
-      const dateStr = it.import_date || it.imported_at || it.waktu_import;
+      const dateStr = it.waktu_import || it.imported_at || it.import_date;
       const daysOld = getDaysDifference(dateStr);
       const isWaiting = it.status === 'waiting' || it.status === 'waiting_approval';
       const isRejected = it.status === 'rejected';
@@ -283,6 +283,17 @@ export default function InvoiceListPage() {
   };
 
   const isAllSelected = paginatedItems.length > 0 && paginatedItems.every((r) => selectedIds.includes(r.id));
+
+  // Tampilkan skeleton saat render pertama di server untuk menghindari hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6 pb-24 p-6">
+        <div className="h-8 w-64 bg-stone-100 rounded-lg animate-pulse" />
+        <div className="h-20 bg-stone-50 border border-stone-200/80 rounded-2xl animate-pulse" />
+        <div className="h-96 bg-white border border-stone-200/80 rounded-2xl animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24">
@@ -499,13 +510,13 @@ export default function InvoiceListPage() {
               ) : (
                 paginatedItems.map((row, idx) => {
                   const globalIdx = (currentPage - 1) * pageSize + idx + 1;
-                  const dateStr = row.import_date || row.imported_at || row.waktu_import;
+                  const dateStr = row.waktu_import || row.imported_at || row.import_date;
                   const daysOld = getDaysDifference(dateStr);
                   const isWaiting = row.status === 'waiting' || row.status === 'waiting_approval';
                   const isSlaBreached = isWaiting && daysOld >= 3;
                   const isDuplicate = row.isDuplicate === true;
                   const isRejected = row.status === 'rejected';
-                  const isReady = row.status === 'ready' || row.status === 'draft' || !row.status;
+                  const isReady = row.status === 'ready' || row.status === 'draft' || row.status === 'ready_to_process' || !row.status;
                   const isSelected = selectedIds.includes(row.id);
                   const isReasonOpen = activeReasonId === row.id;
 
@@ -537,7 +548,7 @@ export default function InvoiceListPage() {
                       <td className="py-3.5 px-3 text-center text-stone-400 font-mono">{globalIdx}</td>
                       
                       <td className="py-3.5 px-4 text-center text-stone-600 font-mono text-[11px] whitespace-nowrap">
-                        {dateStr ? dateStr.slice(0, 10) : '-'}
+                        {dateStr ? String(dateStr).slice(0, 10) : '-'}
                       </td>
 
                       <td className="py-3.5 px-4 font-mono text-stone-900 whitespace-nowrap font-normal">

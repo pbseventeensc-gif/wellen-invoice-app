@@ -100,7 +100,6 @@ export default function ImportExcelTab() {
               clean['netto'] ??
               clean['total netto'];
 
-            // Cek nilai kolom eksplisit dari file Excel jika ada
             const rawDpp = clean['dpp'] ?? clean['nilai dpp'] ?? clean['dpp total'];
             const rawNilaiBarang = clean['nilai barang'] ?? clean['barang'] ?? clean['nilai_barang'];
             const rawJasaCetak = clean['jasa cetak'] ?? clean['jasa_cetak'] ?? clean['jasa'];
@@ -209,7 +208,9 @@ export default function ImportExcelTab() {
               nilai_wpp: finalTotalFaktur,
               dpp: finalDpp,
               nilai_barang: finalNilaiBarang,
+              nilaiBarang: finalNilaiBarang,
               jasa_cetak: finalJasaCetak,
+              jasaCetak: finalJasaCetak,
               pph23: finalWht,
               wht: finalWht,
               dpp_nilai_lain_barang: finalDppLainBarang,
@@ -266,6 +267,36 @@ export default function ImportExcelTab() {
     setSelectedIds((prev) => prev.filter((itemId) => itemId !== id));
   };
 
+  // Fungsi untuk mengedit nilai Grand Total & menghitung ulang rincian otomatis
+  const handleGrandTotalChange = (id, newTotalVal) => {
+    const rawNum = parseCurrencyNumber(newTotalVal);
+    const breakdown = calculateFakturBreakdown(rawNum);
+
+    setImportedRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        return {
+          ...row,
+          raw_total: rawNum,
+          total_faktur: rawNum,
+          total_price: rawNum,
+          nilai_wpp: rawNum,
+          unit_price: rawNum,
+          dpp: breakdown.dpp,
+          nilai_barang: breakdown.nilaiBarang,
+          nilaiBarang: breakdown.nilaiBarang,
+          jasa_cetak: breakdown.jasaCetak,
+          jasaCetak: breakdown.jasaCetak,
+          pph23: breakdown.pph23,
+          wht: breakdown.wht,
+          dpp_nilai_lain_barang: breakdown.dppNilaiLainBarang,
+          dpp_nilai_lain_jasa_cetak: breakdown.dppNilaiLainJasaCetak,
+          ppn: breakdown.ppn,
+        };
+      })
+    );
+  };
+
   const handleProceedToInvoice = () => {
     const selectedRows = importedRows.filter((r) => selectedIds.includes(r.id));
 
@@ -274,6 +305,7 @@ export default function ImportExcelTab() {
       return;
     }
 
+    // 1. Data yang dipilih dikirim ke form Create Invoice
     const stagedPayload = selectedRows.map((r) => ({
       id: r.id,
       no_faktur: r.no_faktur,
@@ -288,7 +320,9 @@ export default function ImportExcelTab() {
       nilai_wpp: r.total_faktur,
       dpp: r.dpp,
       nilai_barang: r.nilai_barang,
+      nilaiBarang: r.nilai_barang,
       jasa_cetak: r.jasa_cetak,
+      jasaCetak: r.jasa_cetak,
       pph23: r.pph23,
       wht: r.wht,
       dpp_nilai_lain_barang: r.dpp_nilai_lain_barang,
@@ -301,19 +335,49 @@ export default function ImportExcelTab() {
       status: 'waiting_approval',
     }));
 
+    // 2. Data yang TIDAK dipilih otomatis dimasukkan ke antrean Invoice List
+    const nowIso = new Date().toISOString();
     const unselectedRows = importedRows
-      .filter((r) => !selectedIds.includes(r.id) && !r.isDuplicate && r.status !== 'invoiced')
+      .filter((r) => !selectedIds.includes(r.id) && r.duplicateReason !== 'Invoice Already Issued (Approved)')
       .map((r) => ({
         ...r,
-        status: 'draft',
+        client_name: detectedClient || r.client_name,
+        promo_name: detectedPromo || r.promo_name,
+        // Status dan field kompatibel untuk Invoice List
+        status: 'ready_to_process',
+        stage_status: 'ready_to_process',
+        import_time: r.import_date ? `${r.import_date} 00:00:00` : nowIso,
+        waktu_import: r.import_date || nowIso,
+        wpp_value: r.total_faktur,
+        reject_reason: '',
       }));
 
     try {
       const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const updatedStaging = [
-        ...unselectedRows,
-        ...existingStaging.filter((s) => !unselectedRows.some((u) => u.id === s.id || u.wpp_number === s.wpp_number)),
-      ];
+
+      // Kunci proteksi unik: kombinasi nomor faktur + nama toko
+      const makeKey = (item) =>
+        `${(item.no_faktur || item.wpp_number || '').trim().toLowerCase()}_${(item.store_name || item.item_description || '').trim().toLowerCase()}`;
+
+      const stagingMap = new Map();
+      existingStaging.forEach((item) => {
+        stagingMap.set(makeKey(item), item);
+      });
+
+      // Hapus data yang dipilih saat ini agar tidak menggantung di antrean draft
+      selectedRows.forEach((item) => {
+        stagingMap.delete(makeKey(item));
+      });
+
+      // Tambahkan data yang tidak dipilih jika belum pernah ada (proteksi duplikasi)
+      unselectedRows.forEach((item) => {
+        const key = makeKey(item);
+        if (!stagingMap.has(key)) {
+          stagingMap.set(key, item);
+        }
+      });
+
+      const updatedStaging = Array.from(stagingMap.values());
       localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
       window.dispatchEvent(new Event('storage'));
     } catch (e) {
@@ -492,7 +556,7 @@ export default function ImportExcelTab() {
                   <th className="py-3 px-3 text-center w-10 font-bold bg-stone-100">NO</th>
                   <th className="py-3 px-3 w-32 font-bold bg-stone-100 leading-tight">INVOICE<br/>NO</th>
                   <th className="py-3 px-3 max-w-[200px] font-bold bg-stone-100 leading-tight">STORE NAME<br/>(ITEM DESCRIPTION)</th>
-                  <th className="py-3 px-3 text-right w-28 font-bold bg-stone-100 leading-tight">GRAND<br/>TOTAL</th>
+                  <th className="py-3 px-3 text-right w-36 font-bold bg-stone-100 leading-tight">GRAND<br/>TOTAL</th>
                   <th className="py-3 px-3 text-right font-bold bg-stone-100 whitespace-nowrap">DPP</th>
                   <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">NILAI<br/>BARANG</th>
                   <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">JASA<br/>CETAK</th>
@@ -556,9 +620,21 @@ export default function ImportExcelTab() {
                         <td className={`py-3 px-3 font-medium tracking-tight max-w-[200px] break-words leading-tight ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
                           {row.store_name}
                         </td>
-                        <td className={`py-3 px-3 text-right font-mono font-bold whitespace-nowrap ${isDup ? 'text-rose-900' : 'text-stone-900'}`}>
-                          {formatRupiah(row.total_faktur)}
+
+                        {/* Kolom Grand Total: HANYA bagian ini yang bisa diedit */}
+                        <td className="py-2 px-2 text-right whitespace-nowrap">
+                          <input
+                            type="number"
+                            disabled={isDup}
+                            value={row.total_faktur === 0 ? '' : row.total_faktur}
+                            onChange={(e) => handleGrandTotalChange(row.id, e.target.value)}
+                            placeholder="0"
+                            className={`w-32 text-right font-mono font-bold text-xs px-2.5 py-1.5 bg-white border border-stone-300 rounded-lg outline-none focus:border-[#55e07e] focus:ring-1 focus:ring-[#55e07e] ${
+                              isDup ? 'opacity-60 bg-stone-100 cursor-not-allowed text-rose-900' : 'text-stone-900'
+                            }`}
+                          />
                         </td>
+
                         <td className="py-3 px-3 text-right font-mono text-stone-700 whitespace-nowrap">
                           {formatRupiah(row.dpp)}
                         </td>
