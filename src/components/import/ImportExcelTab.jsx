@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
+import { listInvoiceStaging, saveInvoiceStagingRows } from '@/utils/invoiceStaging';
 
 export default function ImportExcelTab() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function ImportExcelTab() {
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -266,7 +268,7 @@ export default function ImportExcelTab() {
     );
   };
 
-  const handleSaveToMasterPos = () => {
+  const handleSaveToMasterPos = async () => {
     if (importedRows.length === 0) {
       setFeedback({
         variant: 'error',
@@ -276,56 +278,66 @@ export default function ImportExcelTab() {
       return;
     }
 
+    setIsSaving(true);
     const importedAt = new Date().toISOString();
-    const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-    const stagingByKey = new Map();
+    try {
+      const storedStaging = await listInvoiceStaging();
+      const stagingByKey = new Map();
+      storedStaging.forEach((item) => {
+        const noWpp = (item.no_faktur || item.wpp_number || '').trim().toLowerCase();
+        const client = (item.client_name || '').trim().toLowerCase();
+        stagingByKey.set(`${noWpp}__${client}`, item);
+      });
 
-    storedStaging.forEach((item) => {
-      const noWpp = (item.no_faktur || item.wpp_number || '').trim().toLowerCase();
-      const client = (item.client_name || '').trim().toLowerCase();
-      stagingByKey.set(`${noWpp}__${client}`, item);
-    });
+      let skippedRows = 0;
+      const rowsToSave = [];
+      importedRows.forEach((row) => {
+        const noWpp = (row.no_faktur || row.wpp_number || '').trim().toLowerCase();
+        const client = (row.client_name || detectedClient || '').trim().toLowerCase();
+        const key = `${noWpp}__${client}`;
+        const existing = stagingByKey.get(key);
+        if (existing && existing.status && !['draft', 'ready', 'ready_to_process'].includes(existing.status)) {
+          skippedRows += 1;
+          return;
+        }
 
-    let skippedRows = 0;
-    importedRows.forEach((row) => {
-      const noWpp = (row.no_faktur || row.wpp_number || '').trim().toLowerCase();
-      const client = (row.client_name || detectedClient || '').trim().toLowerCase();
-      const key = `${noWpp}__${client}`;
-      const existing = stagingByKey.get(key);
-      if (existing && existing.status && !['draft', 'ready', 'ready_to_process'].includes(existing.status)) {
-        skippedRows += 1;
-        return;
+        rowsToSave.push({
+          ...existing,
+          ...row,
+          id: existing?.id || row.id,
+          client_name: row.client_name || detectedClient,
+          promo_name: row.promo_name || detectedPromo,
+          import_date: importedAt,
+          imported_at: importedAt,
+          waktu_import: importedAt,
+          month_year: importedAt.slice(0, 7),
+          status: 'draft',
+          isDuplicate: false,
+          duplicateReason: '',
+        });
+      });
+
+      if (rowsToSave.length > 0) {
+        await saveInvoiceStagingRows(rowsToSave);
       }
-
-      const savedRow = {
-        ...existing,
-        ...row,
-        client_name: row.client_name || detectedClient,
-        promo_name: row.promo_name || detectedPromo,
-        import_date: importedAt,
-        imported_at: importedAt,
-        waktu_import: importedAt,
-        month_year: importedAt.slice(0, 7),
-        status: 'draft',
-        isDuplicate: false,
-        duplicateReason: '',
-      };
-      stagingByKey.set(key, savedRow);
-    });
-
-    const updatedStaging = Array.from(stagingByKey.values());
-    localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-    localStorage.setItem('wellen_imported_wpp', JSON.stringify(updatedStaging));
-    window.dispatchEvent(new Event('storage'));
-
-    setFeedback({
-      variant: 'success',
-      title: 'POS data saved',
-      description: `${importedRows.length - skippedRows} rows saved as Draft and ready in Invoices.${skippedRows > 0
-        ? ` ${skippedRows} row(s) already in an invoice workflow and were not overwritten.`
-        : ''}`,
-      confirmLabel: 'Open Invoices',
-    });
+      setFeedback({
+        variant: 'success',
+        title: 'POS data saved',
+        description: `${rowsToSave.length} rows saved as shared Drafts and ready in Invoices.${skippedRows > 0
+          ? ` ${skippedRows} row(s) already in an invoice workflow and were not overwritten.`
+          : ''}`,
+        confirmLabel: 'Open Invoices',
+      });
+    } catch (error) {
+      console.error('Failed to save imported POS rows:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'POS data could not be saved',
+        description: 'The import was not saved to shared drafts. Check your Supabase access and connection, then try again.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const confirmImportAction = () => {
@@ -469,14 +481,14 @@ export default function ImportExcelTab() {
               <button
                 type="button"
                 onClick={handleSaveToMasterPos}
-                disabled={importedRows.length === 0}
+                disabled={importedRows.length === 0 || isSaving}
                 className={`inline-flex items-center gap-2 font-bold px-3.5 py-1.5 rounded-lg text-xs shadow-xs transition-colors shrink-0 ${
-                importedRows.length > 0
+                importedRows.length > 0 && !isSaving
                     ? 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                 }`}
               >
-                <span>Save &amp; Open Invoices ({importedRows.length})</span>
+                <span>{isSaving ? 'Saving shared drafts...' : `Save & Open Invoices (${importedRows.length})`}</span>
                 <ArrowRight size={14} />
               </button>
             </div>

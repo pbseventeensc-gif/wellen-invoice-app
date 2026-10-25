@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseExcelDate } from '@/utils/taxCalculator';
 import { supabase } from '@/lib/supabase';
+import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import { submitInvoiceWorkflow } from '@/utils/invoiceWorkflow';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 
@@ -122,6 +123,7 @@ export default function CreateInvoicePage() {
   const [feedback, setFeedback] = useState(null);
   const [isInitialized, setIsInitialized] = useState(true);
   const [isFahadaLocked, setIsFahadaLocked] = useState(false);
+  const [role, setRole] = useState(null);
 
   // Muat data staging dari sessionStorage setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
   useEffect(() => {
@@ -146,6 +148,15 @@ export default function CreateInvoicePage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         const activeEmail = (user?.email || '').toLowerCase();
+        if (user && isMounted) {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (error) throw error;
+          setRole(normalizeRole(profile?.role));
+        }
 
         if (activeEmail && isMounted) {
           if (activeEmail.includes('keyjia')) {
@@ -343,30 +354,6 @@ export default function CreateInvoicePage() {
       return;
     }
 
-    try {
-      const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const submittedIds = new Set(payload.items.map((it) => it.id));
-      const submittedFakturs = new Set([
-        cleanWpkNumber.toLowerCase(),
-        ...payload.items.map((it) => (it.no_faktur || it.wpp_number || '').toLowerCase().trim()),
-      ]);
-      if (initialData?.fakturNo) {
-        submittedFakturs.add(initialData.fakturNo.toLowerCase().trim());
-      }
-
-      const updatedStaging = existingStaging.map((item) => {
-        const itemId = item.id;
-        const itemFaktur = (item.no_faktur || item.wpp_number || '').toLowerCase().trim();
-        if (submittedIds.has(itemId) || submittedFakturs.has(itemFaktur)) {
-          return { ...item, status: 'waiting_approval' };
-        }
-        return item;
-      });
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-    } catch (e) {
-      console.error('Failed to update staging status:', e);
-    }
-
     sessionStorage.removeItem('wellen_staged_items');
     window.dispatchEvent(new Event('wellen-invoice-workflows'));
 
@@ -374,7 +361,7 @@ export default function CreateInvoicePage() {
       variant: 'success',
       title: 'Invoice submitted',
       description: `Invoice ${cleanWpkNumber} was added to the approval queue successfully.`,
-      confirmLabel: 'View approval queue',
+      confirmLabel: isRouteAllowed(role, '/approval') ? 'View approval queue' : 'Done',
     });
   };
 
@@ -746,7 +733,11 @@ export default function CreateInvoicePage() {
         confirmLabel={feedback?.confirmLabel}
         onAction={() => {
           if (feedback?.variant === 'success') {
-            router.push('/approval');
+            if (isRouteAllowed(role, '/approval')) {
+              router.push('/approval');
+            } else {
+              setFeedback(null);
+            }
           } else {
             setFeedback(null);
           }

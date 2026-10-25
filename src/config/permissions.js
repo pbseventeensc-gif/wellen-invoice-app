@@ -20,26 +20,13 @@ export const ROLE_PERMISSIONS = {
   },
   'ar created': {
     allowedPages: [
-      '/',
-      '/import',
-      '/master-pos',
-      '/create-invoice',
       '/invoices',
-      '/status-approval',
+      '/create-invoice',
     ],
     label: 'AR Creator',
   },
   'approval': {
-    allowedPages: [
-      '/',
-      '/import',
-      '/master-pos',
-      '/create-invoice',
-      '/approval',
-      '/invoices',
-      '/approved-invoices',
-      '/status-approval',
-    ],
+    allowedPages: ALL_MODULE_PAGES,
     label: 'Approval Manager',
   },
   'accounting': {

@@ -15,7 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import { isRouteAllowed } from '@/config/permissions';
+import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import { supabase } from '@/lib/supabase';
 import { markAllInvoiceStatusesSeen } from '@/utils/invoiceNotifications';
 import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
@@ -148,7 +148,7 @@ export default function IconRail({ isSubpanelOpen, onToggleSubpanel }) {
           {/* Statuses and approval actions are consolidated in Invoices */}
           {isRouteAllowed(role, '/invoices') && <Link
             href="/invoices"
-            title="Invoices"
+            title={normalizeRole(role) === 'ar created' ? 'Select Drafts' : 'Invoices'}
             onClick={markAllInvoiceStatusesSeen}
             className={`relative rounded-lg p-2 transition-all ${
               pathname === '/invoices'

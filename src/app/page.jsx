@@ -13,25 +13,27 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
+import { listInvoiceStaging } from '@/utils/invoiceStaging';
 
 export default function HomePage() {
   // Keep initial values identical on the server and client to prevent hydration mismatch.
-  // Import staging is local; invoice workflow counts come from Supabase.
+  // Shared import staging and invoice workflow counts are loaded after mount.
   const [stats, setStats] = useState({ totalStaging: 0, pendingApproval: 0, approvedCount: 0, readyCount: 0 });
   const [loadError, setLoadError] = useState('');
 
   const loadStats = async () => {
     try {
-      const storedStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const stagingList = Array.isArray(storedStaging) ? storedStaging.filter((it) => !it.id?.startsWith('imp-') && !it.wpp_number?.startsWith('WPP-2026-')) : [];
-      const readyItems = stagingList.filter((it) => it.status === 'ready' || (!it.status || it.status === 'staged'));
-      const workflows = await listInvoiceWorkflows();
+      const [stagingList, workflows] = await Promise.all([
+        listInvoiceStaging(),
+        listInvoiceWorkflows(),
+      ]);
+      const activeStaging = stagingList.filter((item) => ['draft', 'ready', 'ready_to_process', 'rejected'].includes(item.status));
 
       setStats({
-        totalStaging: stagingList.length,
+        totalStaging: activeStaging.length,
         pendingApproval: workflows.filter((invoice) => invoice.status === 'waiting_approval').length,
         approvedCount: workflows.filter((invoice) => invoice.status === 'approved').length,
-        readyCount: readyItems.length,
+        readyCount: activeStaging.length,
       });
       setLoadError('');
     } catch (e) {
@@ -46,11 +48,15 @@ export default function HomePage() {
     loadStats();
     window.addEventListener('storage', loadStats);
     window.addEventListener('wellen-invoice-workflows', loadStats);
+    window.addEventListener('wellen-invoice-staging', loadStats);
     window.addEventListener('focus', loadStats);
+    const refreshInterval = window.setInterval(loadStats, 30000);
     return () => {
       window.removeEventListener('storage', loadStats);
       window.removeEventListener('wellen-invoice-workflows', loadStats);
+      window.removeEventListener('wellen-invoice-staging', loadStats);
       window.removeEventListener('focus', loadStats);
+      window.clearInterval(refreshInterval);
     };
   }, []);
 

@@ -14,6 +14,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
+import { listInvoiceStaging, saveInvoiceStagingRows } from '@/utils/invoiceStaging';
 
 const PDF_MAX_BYTES = 20 * 1024 * 1024;
 const PDF_MAX_PAGES = 100;
@@ -101,17 +102,51 @@ export default function ClientPoTab() {
 
   const [selectedPoIds, setSelectedPoIds] = useState([]);
   // Initial state null (sama di server & client) untuk mencegah hydration mismatch.
-  // Data sisa PO dari localStorage dimuat di useEffect setelah mount.
   const [remainingBatch, setRemainingBatch] = useState(null);
 
   useEffect(() => {
-    try {
-      const storedRem = localStorage.getItem('wellen_po_remaining_items');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (storedRem) setRemainingBatch(JSON.parse(storedRem));
-    } catch (e) {
-      console.error(e);
-    }
+    let isMounted = true;
+    const loadRemainingBatch = () => {
+      listInvoiceStaging()
+        .then((rows) => {
+          const remainingRows = rows.filter((row) => row.po_remaining_batch && ['draft', 'ready', 'ready_to_process'].includes(row.status));
+          if (!isMounted) return;
+          if (remainingRows.length === 0) {
+            setRemainingBatch(null);
+            return;
+          }
+          const firstRow = remainingRows[0];
+          const batchRows = remainingRows.filter((row) => row.po_remaining_batch_id === firstRow.po_remaining_batch_id);
+          const metadata = firstRow.po_batch_metadata || {};
+          setRemainingBatch({
+            ...metadata,
+            client_name: firstRow.client_name,
+            po_number: firstRow.po_number || firstRow.no_faktur,
+            remaining_items: batchRows.map((row) => ({
+              ...row,
+              description: row.item_description || row.store_name,
+            })),
+          });
+        })
+        .catch((error) => {
+          console.error('Failed to load shared remaining PO items:', error);
+          if (isMounted) {
+            setPoImportMessage('Shared remaining PO items could not be loaded. Check your connection and Supabase access.');
+          }
+        });
+    };
+    loadRemainingBatch();
+    window.addEventListener('focus', loadRemainingBatch);
+    window.addEventListener('wellen-invoice-staging', loadRemainingBatch);
+    window.addEventListener('wellen-invoice-workflows', loadRemainingBatch);
+    const refreshInterval = window.setInterval(loadRemainingBatch, 30000);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', loadRemainingBatch);
+      window.removeEventListener('wellen-invoice-staging', loadRemainingBatch);
+      window.removeEventListener('wellen-invoice-workflows', loadRemainingBatch);
+      window.clearInterval(refreshInterval);
+    };
   }, []);
 
   const handleLoadRemainingBatch = () => {
@@ -346,7 +381,7 @@ export default function ClientPoTab() {
     setSelectedPoIds((prev) => prev.filter((itemId) => itemId !== id));
   };
 
-  const handleProceedPOInvoice = () => {
+  const handleProceedPOInvoice = async () => {
     const selectedRows = poItems.filter((r) => selectedPoIds.includes(r.id));
 
     if (selectedRows.length === 0) {
@@ -384,6 +419,17 @@ export default function ClientPoTab() {
     const unselectedRows = poItems.filter((r) => !selectedPoIds.includes(r.id));
     if (unselectedRows.length > 0) {
       try {
+        const batchId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `po-batch-${Date.now()}`;
+        const batchMetadata = {
+          client_name: String(poClientName).toUpperCase(),
+          po_number: poNumber,
+          po_date: poDate,
+          promo_name: String(poPromoName).toUpperCase(),
+          po_prices_include_ppn: poPricesIncludePpn,
+          batch_id: batchId,
+        };
         const remainingForStaging = unselectedRows.map((r, idx) => {
           const cleanDesc = String(r.description || '').toUpperCase();
           return {
@@ -403,31 +449,17 @@ export default function ClientPoTab() {
             status: 'ready',
             isJasaCetak: r.isJasaCetak || false,
             po_prices_include_ppn: poPricesIncludePpn,
+            po_number: poNumber,
+            po_remaining_batch: true,
+            po_remaining_batch_id: batchId,
+            po_batch_metadata: batchMetadata,
           };
         });
-
-        const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-        const updatedStaging = [
-          ...remainingForStaging,
-          ...existingStaging.filter((s) => !remainingForStaging.some((u) => u.id === s.id)),
-        ];
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-
-        localStorage.setItem('wellen_po_remaining_items', JSON.stringify({
-          client_name: String(poClientName).toUpperCase(),
-          po_number: poNumber,
-          po_date: poDate,
-          promo_name: String(poPromoName).toUpperCase(),
-          po_prices_include_ppn: poPricesIncludePpn,
-          remaining_items: unselectedRows.map((it) => ({
-            ...it,
-            description: String(it.description).toUpperCase(),
-          })),
-        }));
-
-        window.dispatchEvent(new Event('storage'));
-      } catch (e) {
-        console.error('Failed to save remaining PO items:', e);
+        await saveInvoiceStagingRows(remainingForStaging);
+      } catch (error) {
+        console.error('Failed to save shared remaining PO items:', error);
+        setPoImportMessage('Remaining PO items could not be saved to shared drafts. Check your connection and try again.');
+        return;
       }
     }
 

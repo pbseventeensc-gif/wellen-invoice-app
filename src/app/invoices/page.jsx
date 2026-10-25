@@ -24,6 +24,10 @@ import {
   listInvoiceWorkflows,
   markInvoiceWorkflowPrinted,
 } from '@/utils/invoiceWorkflow';
+import {
+  listInvoiceStaging,
+  updateInvoiceStagingRow,
+} from '@/utils/invoiceStaging';
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import PrintModal from '@/components/invoice-print/PrintModal';
@@ -33,14 +37,6 @@ import {
   markInvoiceStatusSeen,
   saveUnreadStatusCounts,
 } from '@/utils/invoiceNotifications';
-
-const STAGING_KEY = 'wellen_wpp_staging';
-
-function readList(key) {
-  const value = JSON.parse(localStorage.getItem(key) || '[]');
-  if (!Array.isArray(value)) throw new Error(`${key} must contain an array.`);
-  return value;
-}
 
 function getMonthYear(row) {
   if (row.month_year) return String(row.month_year).slice(0, 7);
@@ -85,8 +81,7 @@ function toInvoiceRow(row, status, id, invoiceNo) {
   };
 }
 
-function getAllRows(workflows) {
-  const staging = readList(STAGING_KEY);
+function getAllRows(workflows, staging) {
   const rows = [];
   const activeItemIds = new Set();
   const activeSourceNumbers = new Set();
@@ -113,6 +108,7 @@ function getAllRows(workflows) {
   });
 
   staging.forEach((item) => {
+    if (!['draft', 'ready', 'ready_to_process', 'rejected'].includes(String(item.status || '').toLowerCase())) return;
     const sourceNumbers = [item.source_no_wpp, item.wpp_number, item.no_faktur]
       .map((number) => String(number || '').trim().toLowerCase())
       .filter(Boolean);
@@ -234,6 +230,7 @@ export default function InvoiceListPage() {
   const [sortBy, setSortBy] = useState('import_date');
   const [sortDirection, setSortDirection] = useState('desc');
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [editingDraftTotals, setEditingDraftTotals] = useState({});
   const [selectedDraftIds, setSelectedDraftIds] = useState([]);
   const [selectedPrintIds, setSelectedPrintIds] = useState([]);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -242,8 +239,11 @@ export default function InvoiceListPage() {
 
   const loadRows = async () => {
     try {
-      const workflows = await listInvoiceWorkflows();
-      const nextRows = getAllRows(workflows);
+      const [workflows, staging] = await Promise.all([
+        listInvoiceWorkflows(),
+        listInvoiceStaging(),
+      ]);
+      const nextRows = getAllRows(workflows, staging);
       setRows(nextRows);
       saveUnreadStatusCounts(getUnreadStatusCounts(nextRows));
     } catch (error) {
@@ -278,20 +278,26 @@ export default function InvoiceListPage() {
         return;
       }
       if (isMounted) {
-        setRole(normalizeRole(data?.role));
+        const normalizedRole = normalizeRole(data?.role);
+        setRole(normalizedRole);
+        if (normalizedRole === 'ar created') setStatusFilter('Draft');
       }
     };
     const loadTimer = window.setTimeout(loadRows, 0);
     loadRole();
     window.addEventListener('storage', loadRows);
     window.addEventListener('wellen-invoice-workflows', loadRows);
+    window.addEventListener('wellen-invoice-staging', loadRows);
     window.addEventListener('focus', loadRows);
+    const refreshInterval = window.setInterval(loadRows, 30000);
     return () => {
       isMounted = false;
       window.clearTimeout(loadTimer);
       window.removeEventListener('storage', loadRows);
       window.removeEventListener('wellen-invoice-workflows', loadRows);
+      window.removeEventListener('wellen-invoice-staging', loadRows);
       window.removeEventListener('focus', loadRows);
+      window.clearInterval(refreshInterval);
     };
   }, []);
 
@@ -347,37 +353,33 @@ export default function InvoiceListPage() {
   const printableRows = filteredRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
   const draftRows = filteredRows.filter((row) => row.status === 'Draft');
   const selectedDraftRows = rows.filter((row) => row.status === 'Draft' && selectedDraftIds.includes(row.id));
-  const handleDraftGrandTotalChange = (rowId, value) => {
+  const handleDraftGrandTotalChange = async (rowId, value) => {
     const grandTotal = parseCurrencyNumber(value);
     const breakdown = calculateFakturBreakdown(grandTotal);
     try {
-      const staging = readList(STAGING_KEY);
-      const updatedStaging = staging.map((item) => item.id === rowId
-        ? {
-            ...item,
-            grand_total: grandTotal,
-            raw_total: grandTotal,
-            total_faktur: grandTotal,
-            total_price: grandTotal,
-            nilai_wpp: grandTotal,
-            unit_price: grandTotal,
-            dpp: breakdown.dpp,
-            nilai_barang: breakdown.nilaiBarang,
-            nilaiBarang: breakdown.nilaiBarang,
-            jasa_cetak: breakdown.jasaCetak,
-            jasaCetak: breakdown.jasaCetak,
-            pph23: breakdown.pph23,
-            wht: breakdown.wht,
-            dpp_nilai_lain_barang: breakdown.dppNilaiLainBarang,
-            dpp_nilai_lain_jasa_cetak: breakdown.dppNilaiLainJasaCetak,
-            ppn: breakdown.ppn,
-            updated_at: new Date().toISOString(),
-          }
-        : item
-      );
-      localStorage.setItem(STAGING_KEY, JSON.stringify(updatedStaging));
-      localStorage.setItem('wellen_imported_wpp', JSON.stringify(updatedStaging));
-      loadRows();
+      const draft = rows.find((row) => row.id === rowId);
+      if (!draft) throw new Error('The selected shared draft was not found.');
+      await updateInvoiceStagingRow(rowId, {
+        ...draft,
+        grand_total: grandTotal,
+        raw_total: grandTotal,
+        total_faktur: grandTotal,
+        total_price: grandTotal,
+        nilai_wpp: grandTotal,
+        unit_price: grandTotal,
+        dpp: breakdown.dpp,
+        nilai_barang: breakdown.nilaiBarang,
+        nilaiBarang: breakdown.nilaiBarang,
+        jasa_cetak: breakdown.jasaCetak,
+        jasaCetak: breakdown.jasaCetak,
+        pph23: breakdown.pph23,
+        wht: breakdown.wht,
+        dpp_nilai_lain_barang: breakdown.dppNilaiLainBarang,
+        dpp_nilai_lain_jasa_cetak: breakdown.dppNilaiLainJasaCetak,
+        ppn: breakdown.ppn,
+        updated_at: new Date().toISOString(),
+      });
+      await loadRows();
     } catch (error) {
       console.error('Failed to update draft grand total:', error);
       setFeedback({
@@ -443,20 +445,6 @@ export default function InvoiceListPage() {
     if (!invoice) return;
     try {
       await approveInvoiceWorkflow(invoice.id);
-      const approvedAt = new Date().toISOString();
-      const approvedItemIds = new Set((invoice.items || []).map((item) => item.id).filter(Boolean));
-      const approvedSourceNumbers = new Set((invoice.items || [])
-        .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
-        .map((number) => String(number || '').trim().toLowerCase())
-        .filter(Boolean));
-      const staging = readList(STAGING_KEY).map((item) =>
-        approvedItemIds.has(item.id) || [item.source_no_wpp, item.wpp_number, item.no_faktur]
-          .some((number) => approvedSourceNumbers.has(String(number || '').trim().toLowerCase()))
-          ? { ...item, status: 'approved', approved_at: approvedAt, updated_at: approvedAt }
-          : item
-      );
-      localStorage.setItem(STAGING_KEY, JSON.stringify(staging));
-      localStorage.setItem('wellen_imported_wpp', JSON.stringify(staging));
       window.dispatchEvent(new Event('wellen-invoice-workflows'));
       markInvoiceStatusSeen('Approved');
       loadRows();
@@ -468,10 +456,11 @@ export default function InvoiceListPage() {
       });
     } catch (error) {
       console.error('Failed to approve invoice:', error);
+      loadRows();
       setFeedback({
         variant: 'error',
         title: 'Approval could not be completed',
-        description: 'No success was recorded. Please try again or contact an administrator.',
+        description: 'No approval was recorded. Please try again or contact an administrator.',
       });
     }
   };
@@ -498,6 +487,8 @@ export default function InvoiceListPage() {
   };
 
   const canApprove = role === 'approval' || role === 'super admin';
+  const canSelectDraft = ['approval', 'super admin', 'ar created'].includes(role);
+  const canEditDraft = ['approval', 'super admin'].includes(role);
   const statusOptions = [
     { value: 'ALL', label: 'All statuses' },
     { value: 'Invoiced', label: 'Invoiced' },
@@ -519,6 +510,9 @@ export default function InvoiceListPage() {
     { value: 'Invoiced', label: 'Invoiced', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length },
     { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length },
   ];
+  const visibleInvoiceCards = role === 'ar created'
+    ? invoiceCards.filter((card) => card.value === 'Draft')
+    : invoiceCards;
   const markStatusSeen = (status) => {
     markInvoiceStatusSeen(status);
     saveUnreadStatusCounts(getUnreadStatusCounts(rows));
@@ -543,7 +537,9 @@ export default function InvoiceListPage() {
       <header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-medium text-slate-400">Sales <span className="px-1">›</span> Finance</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Invoices</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+            {role === 'ar created' ? 'POS Drafts for Invoice Creation' : 'Invoices'}
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedDraftRows.length > 0 && (
@@ -560,7 +556,7 @@ export default function InvoiceListPage() {
       </header>
 
       <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        {invoiceCards.map((card) => {
+        {visibleInvoiceCards.map((card) => {
           const Icon = card.icon;
           const isActive = statusFilter === card.value;
           return (
@@ -775,7 +771,7 @@ export default function InvoiceListPage() {
                   }`}
                 >
                   <td className="px-3 py-3 text-center" onClick={(event) => event.stopPropagation()}>
-                    {row.status === 'Draft' ? (
+                    {row.status === 'Draft' && canSelectDraft ? (
                       <input
                         type="checkbox"
                         aria-label={`Select draft ${row.no_wpp} to create an invoice`}
@@ -847,8 +843,18 @@ export default function InvoiceListPage() {
                           min="0"
                           step="1"
                           aria-label={`Edit grand total for ${row.no_wpp}`}
-                          value={row.grand_total}
-                          onChange={(event) => handleDraftGrandTotalChange(row.id, event.target.value)}
+                          value={editingDraftTotals[row.id] ?? row.grand_total}
+                          onChange={(event) => setEditingDraftTotals((current) => ({ ...current, [row.id]: event.target.value }))}
+                          onBlur={(event) => {
+                            if (editingDraftTotals[row.id] === undefined) return;
+                            const value = event.target.value;
+                            setEditingDraftTotals((current) => {
+                              const next = { ...current };
+                              delete next[row.id];
+                              return next;
+                            });
+                            handleDraftGrandTotalChange(row.id, value);
+                          }}
                           className="w-32 rounded-md border border-slate-200 bg-white px-2 py-1 text-right font-mono text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                         />
                       </label>

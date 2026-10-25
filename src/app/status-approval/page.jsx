@@ -12,6 +12,7 @@ import { formatRupiah } from '@/utils/taxCalculator';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import TablePagination from '@/components/ui/TablePagination';
 import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
+import { saveInvoiceStagingRows } from '@/utils/invoiceStaging';
 
 export default function StatusApprovalPage() {
   // Initial state kosong (sama di server & client) untuk mencegah hydration mismatch.
@@ -63,45 +64,35 @@ export default function StatusApprovalPage() {
     };
   }, []);
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingItem) return;
     try {
-      const staging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      if (!Array.isArray(staging)) throw new Error('POS staging data is not an array.');
       const qty = Number(editingItem.qty) || 1;
       const unitPrice = Number(editingItem.unit_price) || 0;
-      let updatedCount = 0;
-      const updated = staging.map((item) => {
-        if (item.id !== editingItem.id) return item;
-        updatedCount += 1;
-        const totalPrice = Math.round(qty * unitPrice);
-        return {
-          ...item,
-          store_name: editingItem.store_name,
-          item_description: editingItem.store_name,
-          qty,
-          unit_price: unitPrice,
-          total_price: totalPrice,
-          nilai_wpp: totalPrice,
-          status: 'draft',
-        };
-      });
-      if (!updatedCount) throw new Error('The local draft matching this rejected invoice item was not found.');
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updated));
+      const totalPrice = Math.round(qty * unitPrice);
+      await saveInvoiceStagingRows([{
+        ...editingItem,
+        store_name: editingItem.store_name,
+        item_description: editingItem.store_name,
+        qty,
+        unit_price: unitPrice,
+        total_price: totalPrice,
+        nilai_wpp: totalPrice,
+        status: 'draft',
+      }]);
       setIsEditModalOpen(false);
       setEditingItem(null);
       setFeedback({
         variant: 'success',
         title: 'Draft revision prepared',
-        description: 'A local draft was prepared. The rejected invoice remains unchanged in the shared approval history.',
+        description: 'A shared draft revision was prepared. The rejected invoice remains unchanged in the shared approval history.',
       });
-      window.dispatchEvent(new Event('storage'));
     } catch (error) {
       console.error('Failed to prepare rejected invoice revision:', error);
       setFeedback({
         variant: 'error',
         title: 'Draft revision could not be prepared',
-        description: error.message || 'The local draft could not be updated.',
+        description: error.message || 'The shared draft could not be updated.',
       });
     }
   };

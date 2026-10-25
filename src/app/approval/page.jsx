@@ -85,30 +85,6 @@ export default function ApprovalPage() {
       return;
     }
 
-    try {
-      const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-      const itemIds = new Set(invoiceToApprove.items?.map((item) => item.id).filter(Boolean));
-      const sourceNumbers = new Set(
-        (invoiceToApprove.items || [])
-          .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
-          .map((number) => String(number || '').trim().toLowerCase())
-          .filter(Boolean)
-      );
-
-      const updatedStaging = existingStaging.map((wpp) => {
-        const wppNumbers = [wpp.source_no_wpp, wpp.wpp_number, wpp.no_faktur]
-          .map((number) => String(number || '').trim().toLowerCase())
-          .filter(Boolean);
-        if (itemIds.has(wpp.id) || wppNumbers.some((number) => sourceNumbers.has(number))) {
-          return { ...wpp, status: 'approved' };
-        }
-        return wpp;
-      });
-      localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-    } catch (error) {
-      console.error('Failed to sync local staging after approval:', error);
-    }
-
     const nextQueue = queue.filter((q) => q.id !== invoiceToApprove.id);
     setQueue(nextQueue);
     window.dispatchEvent(new Event('wellen-invoice-workflows'));
@@ -145,37 +121,6 @@ export default function ApprovalPage() {
         return;
       }
 
-      try {
-        const existingStaging = JSON.parse(localStorage.getItem('wellen_wpp_staging') || '[]');
-        const rejectedItemIds = new Set(targetInvoice.items?.map((item) => item.id).filter(Boolean));
-        const rejectedSourceNumbers = new Set(
-          (targetInvoice.items || [])
-            .flatMap((item) => [item.source_no_wpp, item.wpp_number, item.no_faktur])
-            .map((number) => String(number || '').trim().toLowerCase())
-            .filter(Boolean)
-        );
-
-        if (rejectedSourceNumbers.size === 0 && targetInvoice.invoice_number) {
-          rejectedSourceNumbers.add(String(targetInvoice.invoice_number).trim().toLowerCase());
-        }
-
-        const updatedStaging = existingStaging.map((wpp) => {
-          const wppNumbers = [wpp.source_no_wpp, wpp.wpp_number, wpp.no_faktur]
-            .map((number) => String(number || '').trim().toLowerCase())
-            .filter(Boolean);
-          if (rejectedItemIds.has(wpp.id) || wppNumbers.some((number) => rejectedSourceNumbers.has(number))) {
-            return { 
-              ...wpp, 
-              status: 'rejected', 
-              reject_reason: rejectReasonText || 'Needs revision'
-            };
-          }
-          return wpp;
-        });
-        localStorage.setItem('wellen_wpp_staging', JSON.stringify(updatedStaging));
-      } catch (error) {
-        console.error('Failed to sync local staging after rejection:', error);
-      }
     }
 
     const nextQueue = queue.filter((q) => q.id !== rejectTargetId);

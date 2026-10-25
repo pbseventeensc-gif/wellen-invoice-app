@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import userAvatar from '@/assets/logo_userlogin.png';
-import { isRouteAllowed } from '@/config/permissions';
+import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import { markAllInvoiceStatusesSeen } from '@/utils/invoiceNotifications';
 import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
@@ -184,7 +184,7 @@ export default function WhiteSubpanel() {
 
   const allInvoiceMenus = [
     { label: 'Master POS / Draft', href: '/master-pos', icon: Database },
-    { label: 'Invoices', href: '/invoices', icon: FileCheck2 },
+    { label: normalizeRole(profile.role) === 'ar created' ? 'Select Drafts' : 'Invoices', href: '/invoices', icon: FileCheck2 },
     { label: 'Approval Queue', href: '/approval', icon: ClipboardCheck },
   ];
 

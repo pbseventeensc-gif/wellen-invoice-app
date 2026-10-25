@@ -139,11 +139,11 @@ export default function DashboardLayoutWrapper({ children }) {
                 </p>
               </div>
               <Link
-                href="/invoices"
+                href={isRouteAllowed(userRole, '/invoices') ? '/invoices' : '/create-invoice'}
                 className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
               >
                 <ArrowLeft size={14} />
-                <span>Return to Invoice List</span>
+                <span>{isRouteAllowed(userRole, '/invoices') ? 'Return to Invoice List' : 'Go to Create Invoice'}</span>
               </Link>
             </div>
           </div>

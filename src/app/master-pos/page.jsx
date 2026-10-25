@@ -10,8 +10,11 @@ import {
   formatRupiah,
   parseCurrencyNumber,
 } from '@/utils/taxCalculator';
-
-const STORAGE_KEY = 'wellen_wpp_staging';
+import {
+  deleteInvoiceStagingRow,
+  listInvoiceStaging,
+  updateInvoiceStagingRow,
+} from '@/utils/invoiceStaging';
 
 function getCompositeKey(row) {
   return `${String(row.no_faktur || row.wpp_number || '').trim().toLowerCase()}__${String(row.client_name || '').trim().toLowerCase()}`;
@@ -25,6 +28,7 @@ function isProcessableRow(row) {
 export default function MasterPosPage() {
   const router = useRouter();
   const [rows, setRows] = useState([]);
+  const [editingTotals, setEditingTotals] = useState({});
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8;
@@ -32,21 +36,23 @@ export default function MasterPosPage() {
   const [feedback, setFeedback] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
-  const loadRows = () => {
+  const loadRows = async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      if (!Array.isArray(stored)) {
-        throw new Error('Master POS storage must contain a list of rows.');
-      }
+      const stored = await listInvoiceStaging();
       const latestByKey = new Map();
       stored.filter(isProcessableRow).forEach((row) => {
         latestByKey.set(getCompositeKey(row), row);
       });
       const masterRows = Array.from(latestByKey.values());
       setRows(masterRows);
+      setFeedback((current) => current?.title === 'Master POS could not be loaded' ? null : current);
     } catch (error) {
       console.error('Failed to load Master POS data:', error);
-      setRows([]);
+      setFeedback({
+        variant: 'error',
+        title: 'Master POS could not be loaded',
+        description: 'Shared POS drafts could not be reached. Check your connection and Supabase access, then try again.',
+      });
     }
   };
 
@@ -56,18 +62,19 @@ export default function MasterPosPage() {
       loadRows();
     });
     window.addEventListener('storage', loadRows);
+    window.addEventListener('wellen-invoice-staging', loadRows);
+    window.addEventListener('wellen-invoice-workflows', loadRows);
+    window.addEventListener('focus', loadRows);
+    const refreshInterval = window.setInterval(loadRows, 30000);
     return () => {
       window.cancelAnimationFrame(frameId);
+      window.clearInterval(refreshInterval);
       window.removeEventListener('storage', loadRows);
+      window.removeEventListener('wellen-invoice-staging', loadRows);
+      window.removeEventListener('wellen-invoice-workflows', loadRows);
+      window.removeEventListener('focus', loadRows);
     };
   }, []);
-
-  const persistRows = (nextRows) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextRows));
-    localStorage.setItem('wellen_imported_wpp', JSON.stringify(nextRows));
-    setRows(nextRows);
-    window.dispatchEvent(new Event('storage'));
-  };
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -87,7 +94,7 @@ export default function MasterPosPage() {
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const visiblePage = Math.min(currentPage, totalPages);
   const paginatedRows = filteredRows.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
-  const handleGrandTotalChange = (rowId, value) => {
+  const handleGrandTotalChange = async (rowId, value) => {
     const grandTotal = parseCurrencyNumber(value);
     const breakdown = calculateFakturBreakdown(grandTotal);
     const nextRows = rows.map((row) =>
@@ -113,7 +120,19 @@ export default function MasterPosPage() {
           }
         : row
     );
-    persistRows(nextRows);
+    const updatedRow = nextRows.find((row) => row.id === rowId);
+    if (!updatedRow) return;
+    try {
+      await updateInvoiceStagingRow(rowId, updatedRow);
+      setRows(nextRows);
+    } catch (error) {
+      console.error('Failed to update Master POS draft:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Grand total could not be saved',
+        description: 'The shared draft amount was not saved. Check your connection and try again.',
+      });
+    }
   };
 
   const handleDelete = (row) => {
@@ -126,14 +145,22 @@ export default function MasterPosPage() {
     });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!pendingDelete) return;
     const rowId = pendingDelete.id;
     setPendingDelete(null);
     setFeedback(null);
-    const nextRows = rows.filter((item) => item.id !== rowId);
-    persistRows(nextRows);
-    setSelectedIds((current) => current.filter((id) => id !== rowId));
+    try {
+      await deleteInvoiceStagingRow(rowId);
+      setRows((current) => current.filter((item) => item.id !== rowId));
+    } catch (error) {
+      console.error('Failed to delete Master POS draft:', error);
+      setFeedback({
+        variant: 'error',
+        title: 'Draft could not be deleted',
+        description: 'The shared POS draft was not deleted. It may already be in an invoice workflow.',
+      });
+    }
   };
 
   if (!mounted) {
@@ -236,8 +263,18 @@ export default function MasterPosPage() {
                           step="1"
                           aria-label={`Grand Total ${row.no_faktur || row.wpp_number}`}
                           disabled={!isDraft}
-                          value={Number(row.total_faktur || row.total_price || row.nilai_wpp || 0)}
-                          onChange={(event) => handleGrandTotalChange(row.id, event.target.value)}
+                          value={editingTotals[row.id] ?? Number(row.total_faktur || row.total_price || row.nilai_wpp || 0)}
+                          onChange={(event) => setEditingTotals((current) => ({ ...current, [row.id]: event.target.value }))}
+                          onBlur={(event) => {
+                            if (editingTotals[row.id] === undefined) return;
+                            const value = event.target.value;
+                            setEditingTotals((current) => {
+                              const next = { ...current };
+                              delete next[row.id];
+                              return next;
+                            });
+                            handleGrandTotalChange(row.id, value);
+                          }}
                           className="w-36 rounded-lg border border-stone-300 bg-white px-2 py-2 text-right font-mono text-xs font-bold text-stone-900 outline-none focus:border-amber-500 disabled:bg-stone-100"
                         />
                       </td>

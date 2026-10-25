@@ -29,16 +29,20 @@ Page access is restricted by role:
 | Role | Pages |
 | --- | --- |
 | Super Admin | All application pages |
-| AR Creator | Dashboard, Import, Master POS / Draft, Create Invoice, Invoice List, Status Approval |
-| Approval Manager | Dashboard, Import, Master POS / Draft, Create Invoice, Approval Queue, Invoice List, Approved Invoices, Status Approval |
+| AR Creator | Select shared POS Drafts, Create Invoice |
+| Approval Manager | All application pages, including Import |
 | Accounting & Tax | Dashboard, Invoice List, Approved Invoices, Accounting Reports, e-Faktur Export |
 
 The **Import WPP (Excel)** page parses an Excel recap. Save the parsed rows to
 **Master POS / Draft** to review or update Grand Total, whose tax breakdown is
-recalculated from the existing invoice calculation rules. Select one or more
-Draft rows in Master POS to continue to **Create Invoice**. Draft/import
-staging remains in this browser; submitted invoices, approval decisions, and
-approved invoice changes are shared through Supabase.
+recalculated from the existing invoice calculation rules. POS drafts and
+remaining PO items are stored in Supabase so authorized users see the same
+staging data. Select one or more Draft rows to continue to **Create Invoice**.
+Approval Managers and Super Admins can import and manage shared POS drafts. AR
+Creators can select existing shared POS Drafts, create invoices, and submit
+them for approval; they cannot import or edit drafts or view other invoices.
+Submitted invoices, approval decisions, and approved invoice changes are also
+shared through Supabase.
 
 ### Invoice workflow database setup
 
@@ -56,18 +60,32 @@ Apply the follow-up migration
 after the initial workflow migration; it adds this role to the server-side
 invoice-submission check.
 
-Submitted invoices already stored in browser storage are **not** imported by
-this migration; treat them as untrusted and verify/migrate any required records
-through an authorized process. Verify the migration and role-specific behavior
-in the target Supabase project before deploying the frontend. Configure
+Apply the shared-draft migration
+[`supabase/migrations/20261024225500_shared_invoice_staging.sql`](./supabase/migrations/20261024225500_shared_invoice_staging.sql)
+after both workflow migrations. It creates the RLS-protected staging table and
+role-checked RPCs for importing, editing, and deleting shared POS drafts, with
+draft lifecycle updates tied transactionally to invoice workflow changes.
+
+Apply
+[`supabase/migrations/20261025115900_limit_ar_creator_access.sql`](./supabase/migrations/20261025115900_limit_ar_creator_access.sql)
+after the shared-draft migration. It restricts AR Creator reads to actionable
+POS drafts and prevents that role from reading invoice workflows or importing,
+editing, or deleting shared drafts. Approval Managers and Super Admins retain
+shared-draft management access.
+
+Existing browser-only drafts and invoices are **not** imported by these
+migrations; re-import required draft data and verify/migrate any required
+submitted invoices through an authorized process. Verify all migrations and
+role-specific behavior in the target Supabase project before deploying the
+frontend. Configure
 `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the deployment
 environment.
 
-Route checks do not secure data by themselves. Invoice workflow mutations are
-enforced by Supabase RPC role checks and Row Level Security, while unsent
-draft/import staging is still stored in browser storage. The browser-based
-Supabase session also does not provide an HttpOnly cookie; use server-managed
-sessions before treating it as an XSS-resistant authentication boundary.
+Route checks do not secure data by themselves. Invoice workflow and draft
+mutations are enforced by Supabase RPC role checks and Row Level Security. The
+browser-based Supabase session also does not provide an HttpOnly cookie; use
+server-managed sessions before treating it as an XSS-resistant authentication
+boundary.
 
 You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
 

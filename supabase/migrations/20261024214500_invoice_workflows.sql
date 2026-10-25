@@ -37,7 +37,7 @@ create policy "Invoice workflow readers can view invoices"
       from public.profiles p
       where p.id = (select auth.uid())
         and lower(regexp_replace(trim(coalesce(p.role, '')), '[_-]+', ' ', 'g'))
-          in ('super admin', 'superadmin', 'administrator', 'admin', 'approval', 'approval manager', 'approver', 'accounting', 'accounting tax', 'accounting & tax', 'tax', 'pajak', 'ar created', 'ar creator', 'creator', 'staff')
+          in ('super admin', 'superadmin', 'administrator', 'admin', 'approval', 'approval manager', 'approver', 'accounting', 'accounting tax', 'accounting & tax', 'tax', 'pajak')
     )
   );
 

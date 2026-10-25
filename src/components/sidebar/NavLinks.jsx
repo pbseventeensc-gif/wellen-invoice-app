@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { isRouteAllowed } from '@/config/permissions';
+import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 
 export default function NavLinks() {
   const pathname = usePathname();
@@ -52,7 +52,7 @@ export default function NavLinks() {
     { label: 'Import Excel', href: '/import', icon: FileSpreadsheet },
     { label: 'Create Invoice', href: '/create-invoice', icon: FileText },
     { label: 'Approval Queue', href: '/approval', icon: CheckCircle2 },
-    { label: 'Invoice List', href: '/invoices', icon: BarChart3 },
+    { label: normalizeRole(role) === 'ar created' ? 'Select Drafts' : 'Invoice List', href: '/invoices', icon: BarChart3 },
     { label: 'Accounting Reports', href: '/accounting-reports', icon: PieChart },
   ];
 
