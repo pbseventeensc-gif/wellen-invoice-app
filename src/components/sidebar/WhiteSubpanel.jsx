@@ -17,7 +17,8 @@ import {
   BarChart3, 
   ArrowUpRight,
   LogOut,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 
 export default function WhiteSubpanel() {
@@ -185,6 +186,7 @@ export default function WhiteSubpanel() {
   const allInvoiceMenus = [
     { label: 'Master POS / Draft', href: '/master-pos', icon: Database },
     { label: normalizeRole(profile.role) === 'ar created' ? 'Select Drafts' : 'Invoices', href: '/invoices', icon: FileCheck2 },
+    { label: 'Waiting Approval', href: '/status-approval', icon: Clock },
     { label: 'Approval Queue', href: '/approval', icon: ClipboardCheck },
   ];
 
@@ -288,11 +290,11 @@ export default function WhiteSubpanel() {
         <button
           onClick={handleResetAllData}
           type="button"
-          title="Hapus semua data mock/sampel"
+          title="Clear local sample data"
           className="w-full flex items-center justify-center gap-2 py-2 px-3 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer"
         >
           <Trash2 size={13} />
-          <span>Bersihkan Sampel Data</span>
+          <span>Clear Sample Data</span>
         </button>
       </div>
 

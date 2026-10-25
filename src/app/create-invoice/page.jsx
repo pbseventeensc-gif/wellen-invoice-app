@@ -428,20 +428,15 @@ export default function CreateInvoicePage() {
           <div>
             <label htmlFor="created-by" className="text-[11px] font-semibold text-stone-600 block mb-1">Created By (AR Staff)</label>
             {role === 'ar created' || userEmail.includes('fahada') || userEmail.includes('keyjia') ? (
-              <div>
-                <input
-                  id="created-by"
-                  name="createdByName"
-                  type="text"
-                  readOnly
-                  disabled
-                  value={`${createdByName} (${userEmail || (createdByName.toLowerCase() + '@gmail.com')})`}
-                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-700 cursor-not-allowed select-none"
-                />
-                <p className="text-[10px] text-amber-700 font-medium mt-1">
-                  🔒 Terkunci (Sesuai akun login: {createdByName})
-                </p>
-              </div>
+              <input
+                id="created-by"
+                name="createdByName"
+                type="text"
+                readOnly
+                disabled
+                value={`${createdByName} (${userEmail || (createdByName.toLowerCase() + '@gmail.com')})`}
+                className="w-full text-xs font-semibold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-700 cursor-not-allowed select-none"
+              />
             ) : (
               <select
                 id="created-by"

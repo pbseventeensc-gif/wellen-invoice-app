@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS = {
     allowedPages: [
       '/invoices',
       '/create-invoice',
+      '/status-approval',
     ],
     label: 'AR Creator',
   },

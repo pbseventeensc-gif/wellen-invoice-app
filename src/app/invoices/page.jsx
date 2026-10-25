@@ -399,28 +399,28 @@ export default function InvoiceListPage() {
       if (claimedKeys.size === ids.length) {
         setFeedback({
           variant: 'success',
-          title: 'Draft berhasil diklaim',
-          description: `${claimedKeys.size} draft sekarang dikunci untuk Anda dan siap diproses ke invoice.`,
+          title: 'Draft claimed successfully',
+          description: `${claimedKeys.size} draft(s) are now locked for you and ready to be invoiced.`,
         });
       } else if (claimedKeys.size > 0) {
         setFeedback({
           variant: 'success',
-          title: 'Sebagian draft berhasil diklaim',
-          description: `${claimedKeys.size} draft berhasil diklaim. ${failedCount} draft lainnya sudah diklaim lebih dulu oleh AR lain.`,
+          title: 'Some drafts claimed',
+          description: `${claimedKeys.size} draft(s) claimed. ${failedCount} draft(s) were already claimed by another AR.`,
         });
       } else {
         setFeedback({
           variant: 'error',
-          title: 'Gagal mengklaim draft',
-          description: 'Draft yang Anda pilih sudah diklaim oleh AR lain.',
+          title: 'Failed to claim draft',
+          description: 'The selected draft(s) are already claimed by another AR.',
         });
       }
     } catch (err) {
       console.error('Failed to claim drafts:', err);
       setFeedback({
         variant: 'error',
-        title: 'Klaim gagal',
-        description: err.message || 'Terjadi kesalahan saat mengklaim draft.',
+        title: 'Claim failed',
+        description: err.message || 'An error occurred while claiming the draft.',
       });
     }
   };
@@ -434,15 +434,15 @@ export default function InvoiceListPage() {
       setSelectedDraftIds((curr) => curr.filter((id) => !ids.includes(id)));
       setFeedback({
         variant: 'success',
-        title: 'Klaim dilepas',
-        description: `${ids.length} draft telah dikembalikan ke status terbuka (tersedia untuk AR lain).`,
+        title: 'Claim released',
+        description: `${ids.length} draft(s) returned to available pool for other AR.`,
       });
     } catch (err) {
       console.error('Failed to release drafts:', err);
       setFeedback({
         variant: 'error',
-        title: 'Gagal melepas klaim',
-        description: err.message || 'Terjadi kesalahan saat melepas klaim draft.',
+        title: 'Failed to release claim',
+        description: err.message || 'An error occurred while releasing the draft.',
       });
     }
   };
@@ -479,7 +479,7 @@ export default function InvoiceListPage() {
       setFeedback({
         variant: 'error',
         title: 'Grand total could not be saved',
-        description: 'The draft amount was not saved. Check browser storage and try again.',
+        description: 'The draft amount was not saved. Check connection and try again.',
       });
     }
   };
@@ -494,7 +494,7 @@ export default function InvoiceListPage() {
       return;
     }
 
-    // Auto-klaim draft yang belum diklaim sebelum lanjut ke pembuatan invoice
+    // Auto-claim unclaimed drafts before proceeding
     const unclaimedIds = selectedDraftRows
       .filter((row) => !row.claimed_by_id)
       .map((row) => row.id);
@@ -507,8 +507,8 @@ export default function InvoiceListPage() {
           await loadRows();
           setFeedback({
             variant: 'error',
-            title: 'Draft sudah diklaim AR lain',
-            description: 'Beberapa draft yang Anda pilih baru saja diklaim oleh AR lain. Daftar draft telah disegarkan.',
+            title: 'Draft already claimed by another AR',
+            description: 'Some drafts you selected were just claimed by another AR. Draft list has been refreshed.',
           });
           return;
         }
@@ -516,8 +516,8 @@ export default function InvoiceListPage() {
         console.error('Failed to claim drafts before creating invoice:', err);
         setFeedback({
           variant: 'error',
-          title: 'Gagal mengunci draft',
-          description: 'Gagal mengklaim draft sebelum membuat invoice. Silakan coba lagi.',
+          title: 'Failed to lock draft',
+          description: 'Could not lock drafts before creating invoice. Please try again.',
         });
         return;
       }
@@ -552,7 +552,7 @@ export default function InvoiceListPage() {
   const visiblePrintableIds = useMemo(() => visiblePrintableRows.map((r) => r.id), [visiblePrintableRows]);
   const visibleDraftRows = paginatedRows.filter((row) => row.status === 'Draft');
 
-  // Draft yang bisa dipilih oleh user saat ini (tidak diklaim AR lain)
+  // Drafts that can be selected by the current user (not claimed by other AR)
   const selectableDrafts = useMemo(() => {
     return visibleDraftRows.filter((row) => {
       if (row.claimed_by_id && row.claimed_by_id !== currentUser?.id) return false;
@@ -644,11 +644,11 @@ export default function InvoiceListPage() {
   const invoiceCards = [
     { value: 'ALL', label: 'All records', icon: Layers3, color: 'text-slate-700', iconStyle: 'bg-slate-100 text-slate-600', count: matchingRows.length },
     { value: 'Draft', label: 'Draft', icon: Clock3, color: 'text-orange-800', iconStyle: 'bg-orange-50 text-orange-700', count: matchingRows.filter((row) => row.status === 'Draft').length },
-    { value: 'Invoiced', label: 'Invoiced', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length },
+    { value: 'Invoiced', label: 'Waiting Approval', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length },
     { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length },
   ];
   const visibleInvoiceCards = role === 'ar created'
-    ? invoiceCards.filter((card) => card.value === 'Draft')
+    ? invoiceCards.filter((card) => ['Draft', 'Invoiced'].includes(card.value))
     : invoiceCards;
   const markStatusSeen = (status) => {
     markInvoiceStatusSeen(status);
@@ -675,7 +675,7 @@ export default function InvoiceListPage() {
         <div>
           <p className="text-xs font-medium text-slate-400">Sales <span className="px-1">›</span> Finance</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-            {role === 'ar created' ? 'POS Drafts for Invoice Creation' : 'Invoices'}
+            {role === 'ar created' ? 'POS Drafts & Waiting Approval' : 'Invoices'}
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -688,7 +688,7 @@ export default function InvoiceListPage() {
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100"
                 >
                   <Lock size={13} />
-                  Klaim Draft ({selectedDraftRows.filter((r) => !r.claimed_by_id).length})
+                  Claim Draft ({selectedDraftRows.filter((r) => !r.claimed_by_id).length})
                 </button>
               )}
               {selectedDraftRows.some((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)) && (
@@ -698,7 +698,7 @@ export default function InvoiceListPage() {
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   <Unlock size={13} />
-                  Lepas Klaim ({selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).length})
+                  Release Claim ({selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).length})
                 </button>
               )}
               <button
@@ -861,7 +861,7 @@ export default function InvoiceListPage() {
 
           {(statusFilter === 'Draft' || role === 'ar created') && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 text-xs">
-              <span className="mr-1 text-[11px] font-medium text-slate-400">Filter Klaim:</span>
+              <span className="mr-1 text-[11px] font-medium text-slate-400">Claim Filter:</span>
               <button
                 type="button"
                 onClick={() => { setClaimFilter('ALL'); setCurrentPage(1); }}
@@ -871,7 +871,7 @@ export default function InvoiceListPage() {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                Semua ({draftStats.total})
+                All ({draftStats.total})
               </button>
               <button
                 type="button"
@@ -882,7 +882,7 @@ export default function InvoiceListPage() {
                     : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 }`}
               >
-                Tersedia ({draftStats.available})
+                Available ({draftStats.available})
               </button>
               <button
                 type="button"
@@ -894,7 +894,7 @@ export default function InvoiceListPage() {
                 }`}
               >
                 <UserCheck size={12} />
-                Draft Saya ({draftStats.myDrafts})
+                My Drafts ({draftStats.myDrafts})
               </button>
               <button
                 type="button"
@@ -906,7 +906,7 @@ export default function InvoiceListPage() {
                 }`}
               >
                 <Lock size={12} />
-                AR Lain ({draftStats.otherAr})
+                Other AR ({draftStats.otherAr})
               </button>
             </div>
           )}
@@ -987,7 +987,7 @@ export default function InvoiceListPage() {
                         disabled={Boolean(row.claimed_by_id && row.claimed_by_id !== currentUser?.id)}
                         title={
                           row.claimed_by_id && row.claimed_by_id !== currentUser?.id
-                            ? `Sedang dikerjakan oleh ${row.claimed_by_name || 'AR lain'}`
+                            ? `In progress by ${row.claimed_by_name || 'other AR'}`
                             : undefined
                         }
                         checked={selectedDraftIds.includes(row.id)}
@@ -1029,23 +1029,25 @@ export default function InvoiceListPage() {
                             ? 'bg-rose-50 text-rose-700'
                             : 'bg-orange-50 text-orange-800'
                     }`}>
-                      {row.status}
+                      {row.status === 'Invoiced' ? 'Waiting Approval' : row.status}
                     </span>
                     {row.status === 'Draft' && (
                       <div className="mt-1">
                         {row.claimed_by_id === currentUser?.id ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900" title="Draft ini Anda klaim">
-                            <UserCheck size={11} className="text-amber-700" />
-                            Draft Saya
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200" title="Draft claimed by you">
+                            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
+                              <Check size={10} strokeWidth={3} />
+                            </span>
+                            My Draft
                           </span>
                         ) : row.claimed_by_id ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600" title={`Sedang dikerjakan oleh ${row.claimed_by_name}`}>
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600" title={`In progress by ${row.claimed_by_name || 'Other AR'}`}>
                             <Lock size={10} className="text-slate-400" />
-                            {row.claimed_by_name || 'AR Lain'}
+                            {row.claimed_by_name || 'Other AR'}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                            Tersedia
+                            Available
                           </span>
                         )}
                       </div>
@@ -1120,9 +1122,11 @@ export default function InvoiceListPage() {
                               event.stopPropagation();
                               handleClaimDrafts([row.id]);
                             }}
-                            className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                            className="group inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-dashed border-emerald-500 bg-emerald-50 text-emerald-600 shadow-xs transition hover:bg-emerald-600 hover:text-white"
+                            title="Claim draft"
+                            aria-label="Claim draft"
                           >
-                            Klaim
+                            <Check size={14} strokeWidth={2.5} />
                           </button>
                         ) : row.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role) ? (
                           <button
@@ -1131,12 +1135,17 @@ export default function InvoiceListPage() {
                               event.stopPropagation();
                               handleReleaseDrafts([row.id]);
                             }}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100"
+                            className="group inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xs transition hover:bg-rose-600"
+                            title="Claimed - Click to release"
+                            aria-label="Claimed - Click to release"
                           >
-                            Lepas
+                            <Check size={15} strokeWidth={3} className="transition group-hover:hidden" />
+                            <X size={15} strokeWidth={3} className="hidden transition group-hover:block" />
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-400">Terkunci</span>
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400" title={`Claimed by ${row.claimed_by_name || 'Other AR'}`}>
+                            <Lock size={13} />
+                          </span>
                         )}
                       </div>
                     )}
