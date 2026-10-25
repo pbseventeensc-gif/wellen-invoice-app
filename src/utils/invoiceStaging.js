@@ -5,6 +5,9 @@ function mapInvoiceStagingRecord(record) {
     ...(record.payload || {}),
     id: record.source_key,
     status: record.status,
+    claimed_by_id: record.claimed_by_id || null,
+    claimed_by_name: record.claimed_by_name || null,
+    claimed_at: record.claimed_at || null,
     created_at: record.created_at,
     updated_at: record.updated_at,
   };
@@ -19,11 +22,35 @@ function notifyInvoiceStagingChanged() {
 export async function listInvoiceStaging() {
   const { data, error } = await supabase
     .from('invoice_staging')
-    .select('source_key, status, payload, created_at, updated_at')
+    .select('source_key, status, payload, claimed_by_id, claimed_by_name, claimed_at, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   return (data || []).map(mapInvoiceStagingRecord);
+}
+
+export async function claimInvoiceStagingRows(sourceKeys) {
+  const keys = (Array.isArray(sourceKeys) ? sourceKeys : [sourceKeys]).filter(Boolean);
+  if (keys.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('claim_invoice_staging_rows', {
+    p_source_keys: keys,
+  });
+  if (error) throw error;
+  notifyInvoiceStagingChanged();
+  return data || [];
+}
+
+export async function releaseInvoiceStagingRows(sourceKeys) {
+  const keys = (Array.isArray(sourceKeys) ? sourceKeys : [sourceKeys]).filter(Boolean);
+  if (keys.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('release_invoice_staging_rows', {
+    p_source_keys: keys,
+  });
+  if (error) throw error;
+  notifyInvoiceStagingChanged();
+  return data || [];
 }
 
 export async function saveInvoiceStagingRows(rows) {

@@ -11,9 +11,12 @@ import {
   Download,
   FilePlus2,
   Layers3,
+  Lock,
   Pencil,
   Printer,
   Search,
+  Unlock,
+  UserCheck,
   X,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -25,7 +28,9 @@ import {
   markInvoiceWorkflowPrinted,
 } from '@/utils/invoiceWorkflow';
 import {
+  claimInvoiceStagingRows,
   listInvoiceStaging,
+  releaseInvoiceStagingRows,
   updateInvoiceStagingRow,
 } from '@/utils/invoiceStaging';
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
@@ -67,6 +72,9 @@ function toInvoiceRow(row, status, id, invoiceNo) {
     id,
     invoice_no: invoiceNo || row.invoice_no || row.invoice_number || '',
     status,
+    claimed_by_id: row.claimed_by_id || null,
+    claimed_by_name: row.claimed_by_name || null,
+    claimed_at: row.claimed_at || null,
     no_wpp: noWpp,
     transaction_lines: alignedLines,
     client_name: row.client_name || row.customer || '-',
@@ -218,6 +226,8 @@ export default function InvoiceListPage() {
   const router = useRouter();
   const [rows, setRows] = useState([]);
   const [role, setRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [claimFilter, setClaimFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('ALL');
@@ -280,6 +290,11 @@ export default function InvoiceListPage() {
       if (isMounted) {
         const normalizedRole = normalizeRole(data?.role);
         setRole(normalizedRole);
+        setCurrentUser({
+          id: user.id,
+          name: data?.full_name || user.email?.split('@')[0] || 'User',
+          role: normalizedRole,
+        });
         if (normalizedRole === 'ar created') setStatusFilter('Draft');
       }
     };
@@ -319,18 +334,35 @@ export default function InvoiceListPage() {
     const query = search.trim().toLowerCase();
     return rows
       .filter((row) => {
-        const matchesSearch = !query || [row.invoice_no, row.no_wpp, row.client_name, row.store_name]
+        const matchesSearch = !query || [row.invoice_no, row.no_wpp, row.client_name, row.store_name, row.claimed_by_name]
           .some((value) => String(value || '').toLowerCase().includes(query));
         const matchesClient = clientFilter === 'ALL' || row.client_name === clientFilter;
         const date = String(row.import_date || '').slice(0, 10);
         const matchesFrom = !fromDate || date >= fromDate;
         const matchesTo = !toDate || date <= toDate;
         return matchesSearch && matchesClient && matchesFrom && matchesTo;
-      })
+      });
   }, [rows, search, clientFilter, fromDate, toDate]);
+
+  const draftStats = useMemo(() => {
+    const drafts = matchingRows.filter((row) => row.status === 'Draft');
+    const available = drafts.filter((row) => !row.claimed_by_id).length;
+    const myDrafts = drafts.filter((row) => currentUser?.id && row.claimed_by_id === currentUser.id).length;
+    const otherAr = drafts.filter((row) => row.claimed_by_id && row.claimed_by_id !== currentUser?.id).length;
+    return { total: drafts.length, available, myDrafts, otherAr };
+  }, [matchingRows, currentUser]);
+
   const filteredRows = useMemo(() => {
     return matchingRows
-      .filter((row) => statusFilter === 'ALL' || row.status === statusFilter)
+      .filter((row) => {
+        if (statusFilter !== 'ALL' && row.status !== statusFilter) return false;
+        if (statusFilter === 'Draft' || role === 'ar created') {
+          if (claimFilter === 'AVAILABLE') return !row.claimed_by_id;
+          if (claimFilter === 'MY_DRAFTS') return Boolean(currentUser?.id && row.claimed_by_id === currentUser.id);
+          if (claimFilter === 'OTHER_AR') return Boolean(row.claimed_by_id && row.claimed_by_id !== currentUser?.id);
+        }
+        return true;
+      })
       .sort((a, b) => {
         const getValue = (row) => {
           if (sortBy === 'created_invoice_at') return row.created_invoice_at || '';
@@ -346,13 +378,75 @@ export default function InvoiceListPage() {
           : String(valueA).localeCompare(String(valueB), 'id', { numeric: true, sensitivity: 'base' });
         return sortDirection === 'desc' ? -comparison : comparison;
       });
-  }, [matchingRows, statusFilter, sortBy, sortDirection]);
+  }, [matchingRows, statusFilter, claimFilter, role, currentUser, sortBy, sortDirection]);
+
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const visiblePage = Math.min(currentPage, totalPages);
   const paginatedRows = filteredRows.slice((visiblePage - 1) * pageSize, visiblePage * pageSize);
   const printableRows = filteredRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
   const draftRows = filteredRows.filter((row) => row.status === 'Draft');
   const selectedDraftRows = rows.filter((row) => row.status === 'Draft' && selectedDraftIds.includes(row.id));
+
+  const handleClaimDrafts = async (draftIds) => {
+    const ids = (Array.isArray(draftIds) ? draftIds : [draftIds]).filter(Boolean);
+    if (ids.length === 0) return;
+    try {
+      const claimed = await claimInvoiceStagingRows(ids);
+      const claimedKeys = new Set((claimed || []).map((r) => r.source_key));
+      const failedCount = ids.length - claimedKeys.size;
+      await loadRows();
+
+      if (claimedKeys.size === ids.length) {
+        setFeedback({
+          variant: 'success',
+          title: 'Draft berhasil diklaim',
+          description: `${claimedKeys.size} draft sekarang dikunci untuk Anda dan siap diproses ke invoice.`,
+        });
+      } else if (claimedKeys.size > 0) {
+        setFeedback({
+          variant: 'success',
+          title: 'Sebagian draft berhasil diklaim',
+          description: `${claimedKeys.size} draft berhasil diklaim. ${failedCount} draft lainnya sudah diklaim lebih dulu oleh AR lain.`,
+        });
+      } else {
+        setFeedback({
+          variant: 'error',
+          title: 'Gagal mengklaim draft',
+          description: 'Draft yang Anda pilih sudah diklaim oleh AR lain.',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to claim drafts:', err);
+      setFeedback({
+        variant: 'error',
+        title: 'Klaim gagal',
+        description: err.message || 'Terjadi kesalahan saat mengklaim draft.',
+      });
+    }
+  };
+
+  const handleReleaseDrafts = async (draftIds) => {
+    const ids = (Array.isArray(draftIds) ? draftIds : [draftIds]).filter(Boolean);
+    if (ids.length === 0) return;
+    try {
+      await releaseInvoiceStagingRows(ids);
+      await loadRows();
+      setSelectedDraftIds((curr) => curr.filter((id) => !ids.includes(id)));
+      setFeedback({
+        variant: 'success',
+        title: 'Klaim dilepas',
+        description: `${ids.length} draft telah dikembalikan ke status terbuka (tersedia untuk AR lain).`,
+      });
+    } catch (err) {
+      console.error('Failed to release drafts:', err);
+      setFeedback({
+        variant: 'error',
+        title: 'Gagal melepas klaim',
+        description: err.message || 'Terjadi kesalahan saat melepas klaim draft.',
+      });
+    }
+  };
+
   const handleDraftGrandTotalChange = async (rowId, value) => {
     const grandTotal = parseCurrencyNumber(value);
     const breakdown = calculateFakturBreakdown(grandTotal);
@@ -389,7 +483,8 @@ export default function InvoiceListPage() {
       });
     }
   };
-  const handleCreateInvoiceFromDrafts = () => {
+
+  const handleCreateInvoiceFromDrafts = async () => {
     if (selectedDraftRows.length === 0) {
       setFeedback({
         variant: 'error',
@@ -398,6 +493,36 @@ export default function InvoiceListPage() {
       });
       return;
     }
+
+    // Auto-klaim draft yang belum diklaim sebelum lanjut ke pembuatan invoice
+    const unclaimedIds = selectedDraftRows
+      .filter((row) => !row.claimed_by_id)
+      .map((row) => row.id);
+
+    if (unclaimedIds.length > 0) {
+      try {
+        const claimed = await claimInvoiceStagingRows(unclaimedIds);
+        const claimedKeys = new Set((claimed || []).map((r) => r.source_key));
+        if (claimedKeys.size < unclaimedIds.length) {
+          await loadRows();
+          setFeedback({
+            variant: 'error',
+            title: 'Draft sudah diklaim AR lain',
+            description: 'Beberapa draft yang Anda pilih baru saja diklaim oleh AR lain. Daftar draft telah disegarkan.',
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to claim drafts before creating invoice:', err);
+        setFeedback({
+          variant: 'error',
+          title: 'Gagal mengunci draft',
+          description: 'Gagal mengklaim draft sebelum membuat invoice. Silakan coba lagi.',
+        });
+        return;
+      }
+    }
+
     const stagedItems = selectedDraftRows.map((row) => ({
       ...row,
       no_faktur: row.no_faktur || row.wpp_number || row.no_wpp,
@@ -421,12 +546,24 @@ export default function InvoiceListPage() {
       });
     }
   };
+
   const selectedPrintInvoices = printableRows.filter((row) => selectedPrintIds.includes(row.id));
   const visiblePrintableRows = paginatedRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
+  const visiblePrintableIds = useMemo(() => visiblePrintableRows.map((r) => r.id), [visiblePrintableRows]);
   const visibleDraftRows = paginatedRows.filter((row) => row.status === 'Draft');
-  const allActionableSelected = visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id))
-    && visibleDraftRows.every((row) => selectedDraftIds.includes(row.id))
-    && visiblePrintableRows.length + visibleDraftRows.length > 0;
+
+  // Draft yang bisa dipilih oleh user saat ini (tidak diklaim AR lain)
+  const selectableDrafts = useMemo(() => {
+    return visibleDraftRows.filter((row) => {
+      if (row.claimed_by_id && row.claimed_by_id !== currentUser?.id) return false;
+      return true;
+    });
+  }, [visibleDraftRows, currentUser]);
+  const selectableDraftIds = useMemo(() => selectableDrafts.map((r) => r.id), [selectableDrafts]);
+
+  const allActionableSelected = (visiblePrintableRows.length === 0 || visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id)))
+    && (selectableDrafts.length > 0 && selectableDrafts.every((row) => selectedDraftIds.includes(row.id)))
+    && (visiblePrintableRows.length + selectableDrafts.length > 0);
 
   const handleApprove = (invoice) => {
     setPendingApproval(invoice);
@@ -543,14 +680,36 @@ export default function InvoiceListPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedDraftRows.length > 0 && (
-            <button
-              type="button"
-              onClick={handleCreateInvoiceFromDrafts}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
-            >
-              <FilePlus2 size={14} />
-              Create Invoice ({selectedDraftRows.length})
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedDraftRows.some((r) => !r.claimed_by_id) && (
+                <button
+                  type="button"
+                  onClick={() => handleClaimDrafts(selectedDraftRows.filter((r) => !r.claimed_by_id).map((r) => r.id))}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100"
+                >
+                  <Lock size={13} />
+                  Klaim Draft ({selectedDraftRows.filter((r) => !r.claimed_by_id).length})
+                </button>
+              )}
+              {selectedDraftRows.some((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)) && (
+                <button
+                  type="button"
+                  onClick={() => handleReleaseDrafts(selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).map((r) => r.id))}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                >
+                  <Unlock size={13} />
+                  Lepas Klaim ({selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).length})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleCreateInvoiceFromDrafts}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+              >
+                <FilePlus2 size={14} />
+                Create Invoice ({selectedDraftRows.length})
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -699,6 +858,58 @@ export default function InvoiceListPage() {
               All dates
             </button>
           </div>
+
+          {(statusFilter === 'Draft' || role === 'ar created') && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 text-xs">
+              <span className="mr-1 text-[11px] font-medium text-slate-400">Filter Klaim:</span>
+              <button
+                type="button"
+                onClick={() => { setClaimFilter('ALL'); setCurrentPage(1); }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  claimFilter === 'ALL'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Semua ({draftStats.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setClaimFilter('AVAILABLE'); setCurrentPage(1); }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  claimFilter === 'AVAILABLE'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                }`}
+              >
+                Tersedia ({draftStats.available})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setClaimFilter('MY_DRAFTS'); setCurrentPage(1); }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  claimFilter === 'MY_DRAFTS'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                }`}
+              >
+                <UserCheck size={12} />
+                Draft Saya ({draftStats.myDrafts})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setClaimFilter('OTHER_AR'); setCurrentPage(1); }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  claimFilter === 'OTHER_AR'
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                <Lock size={12} />
+                AR Lain ({draftStats.otherAr})
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="data-table-scroll">
@@ -710,13 +921,11 @@ export default function InvoiceListPage() {
                     type="checkbox"
                     aria-label="Select all Draft and printable invoices on this page"
                     checked={allActionableSelected}
-                    disabled={visiblePrintableRows.length + visibleDraftRows.length === 0}
+                    disabled={visiblePrintableRows.length + selectableDrafts.length === 0}
                     onChange={(event) => {
-                      const visibleDraftIds = visibleDraftRows.map((row) => row.id);
-                      const visiblePrintableIds = visiblePrintableRows.map((row) => row.id);
                       setSelectedDraftIds((current) => event.target.checked
-                        ? Array.from(new Set([...current, ...visibleDraftIds]))
-                        : current.filter((id) => !visibleDraftIds.includes(id)));
+                        ? Array.from(new Set([...current, ...selectableDraftIds]))
+                        : current.filter((id) => !selectableDraftIds.includes(id)));
                       setSelectedPrintIds((current) => event.target.checked
                         ? Array.from(new Set([...current, ...visiblePrintableIds]))
                         : current.filter((id) => !visiblePrintableIds.includes(id)));
@@ -775,6 +984,12 @@ export default function InvoiceListPage() {
                       <input
                         type="checkbox"
                         aria-label={`Select draft ${row.no_wpp} to create an invoice`}
+                        disabled={Boolean(row.claimed_by_id && row.claimed_by_id !== currentUser?.id)}
+                        title={
+                          row.claimed_by_id && row.claimed_by_id !== currentUser?.id
+                            ? `Sedang dikerjakan oleh ${row.claimed_by_name || 'AR lain'}`
+                            : undefined
+                        }
                         checked={selectedDraftIds.includes(row.id)}
                         onChange={(event) => {
                           setSelectedDraftIds((current) => event.target.checked
@@ -782,7 +997,11 @@ export default function InvoiceListPage() {
                             : current.filter((id) => id !== row.id)
                           );
                         }}
-                        className="h-4 w-4 rounded border-slate-300 accent-amber-500"
+                        className={`h-4 w-4 rounded border-slate-300 accent-amber-500 ${
+                          row.claimed_by_id && row.claimed_by_id !== currentUser?.id
+                            ? 'cursor-not-allowed opacity-30'
+                            : 'cursor-pointer'
+                        }`}
                       />
                     ) : ['Invoiced', 'Approved'].includes(row.status) && (
                       <input
@@ -812,6 +1031,25 @@ export default function InvoiceListPage() {
                     }`}>
                       {row.status}
                     </span>
+                    {row.status === 'Draft' && (
+                      <div className="mt-1">
+                        {row.claimed_by_id === currentUser?.id ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900" title="Draft ini Anda klaim">
+                            <UserCheck size={11} className="text-amber-700" />
+                            Draft Saya
+                          </span>
+                        ) : row.claimed_by_id ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600" title={`Sedang dikerjakan oleh ${row.claimed_by_name}`}>
+                            <Lock size={10} className="text-slate-400" />
+                            {row.claimed_by_name || 'AR Lain'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                            Tersedia
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="w-44 min-w-44 px-3 py-3 font-mono text-slate-700">
                     <span className="flex flex-col gap-y-0.5 leading-5">
@@ -872,6 +1110,35 @@ export default function InvoiceListPage() {
                       >
                         Approve
                       </button>
+                    )}
+                    {row.status === 'Draft' && canSelectDraft && (
+                      <div className="inline-flex items-center justify-end gap-1">
+                        {!row.claimed_by_id ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleClaimDrafts([row.id]);
+                            }}
+                            className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                          >
+                            Klaim
+                          </button>
+                        ) : row.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role) ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleReleaseDrafts([row.id]);
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100"
+                          >
+                            Lepas
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">Terkunci</span>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>

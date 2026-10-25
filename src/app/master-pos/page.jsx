@@ -254,7 +254,14 @@ export default function MasterPosPage() {
                       className="bg-white hover:bg-stone-50"
                     >
                       <td className="px-3 py-4 text-center text-stone-500">{rowNumber}</td>
-                      <td className="px-3 py-4 font-mono font-bold text-stone-900">{row.no_faktur || row.wpp_number || '-'}</td>
+                      <td className="px-3 py-4 font-mono font-bold text-stone-900">
+                        <div>{row.no_faktur || row.wpp_number || '-'}</div>
+                        {row.claimed_by_name && (
+                          <div className="mt-0.5 text-[10px] font-sans font-normal text-amber-700">
+                            Klaim: {row.claimed_by_name}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-4 font-medium text-stone-800">{row.store_name || row.item_description || '-'}</td>
                       <td className="px-3 py-3 text-right">
                         <input
