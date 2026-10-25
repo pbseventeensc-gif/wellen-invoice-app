@@ -122,8 +122,8 @@ export default function CreateInvoicePage() {
   const [stores, setStores] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [isInitialized, setIsInitialized] = useState(true);
-  const [isFahadaLocked, setIsFahadaLocked] = useState(false);
   const [role, setRole] = useState(null);
+  const [userEmail, setUserEmail] = useState('');
 
   // Muat data staging dari sessionStorage setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
   useEffect(() => {
@@ -147,28 +147,29 @@ export default function CreateInvoicePage() {
     const loadArUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        const activeEmail = (user?.email || '').toLowerCase();
-        if (user && isMounted) {
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-          if (error) throw error;
-          setRole(normalizeRole(profile?.role));
-        }
+        if (!user || !isMounted) return;
 
-        if (activeEmail && isMounted) {
-          if (activeEmail.includes('keyjia')) {
-            setCreatedByName('KEYJIA');
-            setIsFahadaLocked(false);
-          } else if (activeEmail.includes('fahada')) {
-            setCreatedByName('FAHADA');
-            setIsFahadaLocked(true);
-          }
+        const activeEmail = (user.email || '').toLowerCase();
+        setUserEmail(activeEmail);
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const userRole = normalizeRole(profile?.role);
+        setRole(userRole);
+
+        let detectedName = profile?.full_name?.trim();
+        if (!detectedName) {
+          if (activeEmail.includes('keyjia')) detectedName = 'KEYJIA';
+          else if (activeEmail.includes('fahada')) detectedName = 'FAHADA';
+          else detectedName = activeEmail.split('@')[0].toUpperCase();
         }
+        setCreatedByName(detectedName);
       } catch (e) {
-        console.error(e);
+        console.error('Failed to load AR user:', e);
       }
     };
     loadArUser();
@@ -426,21 +427,32 @@ export default function CreateInvoicePage() {
           </div>
           <div>
             <label htmlFor="created-by" className="text-[11px] font-semibold text-stone-600 block mb-1">Created By (AR Staff)</label>
-            <select
-              id="created-by"
-              name="createdByName"
-              value={createdByName}
-              onChange={(e) => setCreatedByName(e.target.value)}
-              disabled={isFahadaLocked}
-              className={`w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 ${
-                isFahadaLocked ? 'opacity-80 bg-stone-100 cursor-not-allowed select-none' : 'cursor-pointer'
-              }`}
-            >
-              <option value="FAHADA">FAHADA (fahadahanifah@gmail.com)</option>
-              <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
-            </select>
-            {isFahadaLocked && (
-              <p className="text-[10px] text-stone-500 mt-1 italic">Locked (Logged in as FAHADA)</p>
+            {role === 'ar created' || userEmail.includes('fahada') || userEmail.includes('keyjia') ? (
+              <div>
+                <input
+                  id="created-by"
+                  name="createdByName"
+                  type="text"
+                  readOnly
+                  disabled
+                  value={`${createdByName} (${userEmail || (createdByName.toLowerCase() + '@gmail.com')})`}
+                  className="w-full text-xs font-semibold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-700 cursor-not-allowed select-none"
+                />
+                <p className="text-[10px] text-amber-700 font-medium mt-1">
+                  🔒 Terkunci (Sesuai akun login: {createdByName})
+                </p>
+              </div>
+            ) : (
+              <select
+                id="created-by"
+                name="createdByName"
+                value={createdByName}
+                onChange={(e) => setCreatedByName(e.target.value)}
+                className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 cursor-pointer"
+              >
+                <option value="FAHADA">FAHADA (fahadahanifah@gmail.com)</option>
+                <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
+              </select>
             )}
           </div>
         </div>
