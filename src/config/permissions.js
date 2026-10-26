@@ -23,6 +23,8 @@ export const ROLE_PERMISSIONS = {
       '/invoices',
       '/create-invoice',
       '/status-approval',
+      '/approval',
+      '/import',
     ],
     label: 'AR Creator',
   },

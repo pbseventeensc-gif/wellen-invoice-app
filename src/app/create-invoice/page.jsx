@@ -253,6 +253,7 @@ export default function CreateInvoicePage() {
   const totalDppNilaiLainOverall = totalDppNilaiLainBarangOverall + totalDppNilaiLainJasaCetakOverall;
 
   const totalPoNetOverall = calculatedStoreRows.reduce((acc, row) => acc + row.effectiveTotalPrice, 0);
+  const displayTotal = importSource === 'po' ? totalPoNetOverall : totalDppOverall;
 
   const vatAmount = importSource === 'po'
     ? Math.round(totalPoNetOverall * 0.11)
@@ -703,7 +704,7 @@ export default function CreateInvoicePage() {
           <div className="flex justify-between items-center text-stone-600 font-normal">
             <span>TOTAL:</span>
             <span className="font-mono font-bold text-stone-900">
-              {formatRupiah(totalPoNetOverall)}
+              {formatRupiah(displayTotal)}
             </span>
           </div>
 

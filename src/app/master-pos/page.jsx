@@ -37,23 +37,9 @@ export default function MasterPosPage() {
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const loadRows = async () => {
-    try {
-      const stored = await listInvoiceStaging();
-      const latestByKey = new Map();
-      stored.filter(isProcessableRow).forEach((row) => {
-        latestByKey.set(getCompositeKey(row), row);
-      });
-      const masterRows = Array.from(latestByKey.values());
-      setRows(masterRows);
-      setFeedback((current) => current?.title === 'Master POS could not be loaded' ? null : current);
-    } catch (error) {
-      console.error('Failed to load Master POS data:', error);
-      setFeedback({
-        variant: 'error',
-        title: 'Master POS could not be loaded',
-        description: 'Shared POS drafts could not be reached. Check your connection and Supabase access, then try again.',
-      });
-    }
+    // Seluruh data draft hasil impor POS langsung dialihkan dan dikelola di menu Invoice (/invoices),
+    // sehingga Master POS / Draft dikosongkan agar tidak ada data ganda.
+    setRows([]);
   };
 
   useEffect(() => {
@@ -241,7 +227,7 @@ export default function MasterPosPage() {
               {filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="px-4 py-16 text-center text-sm text-stone-500">
-                    No imported POS rows yet. Import an Excel recap to add Draft rows here.
+                    No imported POS rows in master draft. All imported POS records are directly managed in the Invoices menu.
                   </td>
                 </tr>
               ) : (

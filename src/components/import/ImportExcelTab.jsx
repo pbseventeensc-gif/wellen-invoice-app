@@ -10,7 +10,9 @@ import {
   Trash2,
   Check,
   AlertTriangle,
-  Search
+  Search,
+  Building2,
+  Tag
 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
@@ -320,6 +322,16 @@ export default function ImportExcelTab() {
       if (rowsToSave.length > 0) {
         await saveInvoiceStagingRows(rowsToSave);
       }
+
+      // Kosongkan draft / form import setelah berhasil diimport
+      setImportedRows([]);
+      setSelectedIds([]);
+      setFileName('');
+      setDetectedClient('');
+      setDetectedPromo('');
+      setDuplicateCount(0);
+      setSearchQuery('');
+
       setFeedback({
         variant: 'success',
         title: 'POS data saved',
@@ -378,7 +390,7 @@ export default function ImportExcelTab() {
   return (
     <div className="space-y-4">
       {/* Kotak Upload Excel */}
-      <div className="bg-white px-6 py-4 rounded-xl border-2 border-dashed border-stone-200 hover:border-amber-500 transition-colors shadow-xs">
+      <div className="bg-gradient-to-b from-stone-50/80 to-white px-6 py-6 rounded-2xl border-2 border-dashed border-amber-300/80 hover:border-amber-500 transition-all shadow-xs group">
         <input
           type="file"
           id="excelUpload"
@@ -386,51 +398,66 @@ export default function ImportExcelTab() {
           onChange={handleFileUpload}
           className="hidden"
         />
-        <label htmlFor="excelUpload" className="cursor-pointer flex items-center justify-center gap-4">
-          <div className="p-2 bg-amber-50 rounded-full text-amber-700 shrink-0">
-            <UploadCloud size={22} />
+        <label htmlFor="excelUpload" className="cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-4 text-center sm:text-left">
+          <div className="p-3 bg-amber-500 text-stone-950 rounded-2xl shadow-sm group-hover:scale-105 transition-transform shrink-0">
+            <UploadCloud size={24} />
           </div>
-          <div className="text-left">
-            <p className="text-xs font-bold text-stone-800 leading-tight">
-              {fileName || 'Click to upload or drag file here (.xlsx / .xls)'}
+          <div>
+            <p className="text-sm font-bold text-stone-900 leading-tight">
+              {fileName || 'Klik untuk upload atau drag file rekap Excel ke sini'}
             </p>
-            <p className="text-[10px] text-stone-400 mt-0.5 font-normal">
-              {fileName ? 'Supported file format: Excel Worksheet' : 'Supported file formats: .xlsx or .xls'}
+            <p className="text-xs text-stone-500 mt-1 font-medium">
+              {fileName ? 'Format file terdeteksi: Excel Spreadsheet terverifikasi' : 'Format didukung: Microsoft Excel (.xlsx / .xls)'}
             </p>
+          </div>
+          <div className="sm:ml-auto">
+            <span className="inline-flex items-center text-[11px] font-bold px-3 py-1.5 rounded-lg bg-stone-100 text-stone-700 border border-stone-200">
+              Pilih File Excel
+            </span>
           </div>
         </label>
       </div>
 
       {/* Metadata Terdeteksi */}
       {importedRows.length > 0 && (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {duplicateCount > 0 && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between text-xs text-rose-900">
               <div className="flex items-center gap-2 font-semibold">
                 <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-                <span>Warning: Detected {duplicateCount} duplicate rows or records already registered in the system.</span>
+                <span>Peringatan: Terdeteksi {duplicateCount} baris duplikat atau sudah tercatat di sistem.</span>
               </div>
-              <span className="text-[11px] text-rose-600 font-medium">Duplicate rows locked automatically</span>
+              <span className="text-[11px] text-rose-600 font-medium">Baris duplikat dikunci otomatis</span>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white px-4 py-3 rounded-xl border border-stone-200/80 shadow-xs">
-              <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider block">
-                FILE NAME / DETECTED PROMO CODE:
-              </span>
-              <p className="text-xs font-bold text-stone-900 tracking-tight mt-0.5 truncate">
-                {detectedPromo}
-              </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs flex items-center gap-3.5">
+              <div className="p-2.5 bg-amber-50 text-amber-700 rounded-xl shrink-0">
+                <Tag size={18} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                  FILE NAME / DETECTED PROMO CODE
+                </span>
+                <p className="text-xs font-bold text-stone-900 tracking-tight mt-0.5 truncate">
+                  {detectedPromo || '-'}
+                </p>
+              </div>
             </div>
 
-            <div className="bg-white px-4 py-3 rounded-xl border border-stone-200/80 shadow-xs">
-              <span className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider block">
-                CUSTOMER / CLIENT:
-              </span>
-              <p className="text-xs font-bold text-stone-900 tracking-tight mt-0.5 truncate">
-                {detectedClient}
-              </p>
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-xs flex items-center gap-3.5">
+              <div className="p-2.5 bg-slate-100 text-slate-700 rounded-xl shrink-0">
+                <Building2 size={18} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                  CUSTOMER / CLIENT NAME (PT)
+                </span>
+                <p className="text-xs font-bold text-stone-900 tracking-tight mt-0.5 truncate">
+                  {detectedClient || '-'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -496,34 +523,34 @@ export default function ImportExcelTab() {
 
           <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 z-10 bg-stone-100 text-stone-700 uppercase font-bold text-[10px] border-b border-stone-200 tracking-wider shadow-xs">
+              <thead className="sticky top-0 z-10 bg-slate-900 text-slate-100 uppercase font-bold text-[10px] tracking-wider shadow-xs">
                 <tr>
-                  <th className="py-3 px-3 text-center w-10 bg-stone-100">
+                  <th className="py-3 px-3 text-center w-10 bg-slate-900">
                     <button
                       type="button"
                       onClick={handleToggleSelectAll}
                       className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors mx-auto ${
                         isAllSelected
                           ? 'bg-amber-500 border-amber-500 text-white font-bold'
-                          : 'border-stone-300 hover:border-amber-500 bg-white'
+                          : 'border-slate-500 hover:border-amber-400 bg-slate-800'
                       }`}
                       title={isAllSelected ? 'Deselect all' : 'Select all valid stores'}
                     >
                       {isAllSelected && <Check size={10} strokeWidth={3} />}
                     </button>
                   </th>
-                  <th className="py-3 px-3 text-center w-10 font-bold bg-stone-100">NO</th>
-                  <th className="py-3 px-3 w-32 font-bold bg-stone-100 leading-tight">INVOICE<br/>NO</th>
-                  <th className="py-3 px-3 max-w-[200px] font-bold bg-stone-100 leading-tight">STORE NAME<br/>(ITEM DESCRIPTION)</th>
-                  <th className="py-3 px-3 text-right w-36 font-bold bg-stone-100 leading-tight">GRAND<br/>TOTAL</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 whitespace-nowrap">DPP</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">NILAI<br/>BARANG</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">JASA<br/>CETAK</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 whitespace-nowrap">WHT</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">DPP NILAI LAIN<br/>BARANG</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 leading-tight">DPP NILAI LAIN<br/>JASA CETAK</th>
-                  <th className="py-3 px-3 text-right font-bold bg-stone-100 whitespace-nowrap">PPN</th>
-                  <th className="py-3 px-3 text-center w-16 font-bold bg-stone-100">ACTION</th>
+                  <th className="py-3 px-3 text-center w-10 font-bold bg-slate-900 text-slate-300">NO</th>
+                  <th className="py-3 px-3 w-32 font-bold bg-slate-900 leading-tight">INVOICE<br/>NO</th>
+                  <th className="py-3 px-3 max-w-[200px] font-bold bg-slate-900 leading-tight">STORE NAME<br/>(ITEM DESCRIPTION)</th>
+                  <th className="py-3 px-3 text-right w-36 font-bold bg-slate-900 leading-tight text-amber-300">GRAND<br/>TOTAL</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 whitespace-nowrap">DPP</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 leading-tight">NILAI<br/>BARANG</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 leading-tight">JASA<br/>CETAK</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 whitespace-nowrap text-rose-300">WHT</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 leading-tight">DPP NILAI LAIN<br/>BARANG</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 leading-tight">DPP NILAI LAIN<br/>JASA CETAK</th>
+                  <th className="py-3 px-3 text-right font-bold bg-slate-900 whitespace-nowrap text-amber-300">PPN</th>
+                  <th className="py-3 px-3 text-center w-16 font-bold bg-slate-900 text-slate-300">ACTION</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-normal">

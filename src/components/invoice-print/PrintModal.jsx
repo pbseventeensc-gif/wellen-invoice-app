@@ -2,7 +2,7 @@
 
 import { Printer, X, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
@@ -39,8 +39,16 @@ function getPrintFilename(invoices) {
     .replace(/[\/\\?%*:|"<>]/g, '-');
 }
 
-export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrintConfirmed }) {
-  const [showInternalBreakdown, setShowInternalBreakdown] = useState(false);
+export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrintConfirmed, initialShowInternal = false }) {
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [showInternalBreakdown, setShowInternalBreakdown] = useState(initialShowInternal);
+
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setShowInternalBreakdown(initialShowInternal);
+    }
+  }
   const portalTarget = useSyncExternalStore(
     subscribeToPrintPortal,
     getPrintPortalSnapshot,
@@ -251,8 +259,8 @@ export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrint
                               </div>
                             </div>
                             <p className="print-letterhead-contact mt-1.5 text-[9px] font-medium leading-relaxed">
-                              Jl. Pasar Minggu Raya No. 9, Jakarta Selatan<br />
-                              Telp: (021) 7918-0000 | Email: billing@wellenprint.com
+                              Jl. Raya Pasar Minggu No.49, RT.2/RW.7, Duren Tiga, Jakarta Selatan<br />
+                              Phone: (021) 79188868 | Email: finance@wellenprint.com
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
@@ -453,7 +461,7 @@ export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrint
                 </table>
               </div>
 
-              <div className="flex flex-col items-center justify-end text-center relative h-28 pb-1">
+              <div className="flex flex-col items-center justify-end text-center relative h-32 pb-1">
                 {(() => {
                   const isApproved =
                     invoice.status === 'approved' ||
@@ -471,22 +479,22 @@ export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrint
 
                   return (
                     <>
-                      <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
+                      <div className="absolute top-0 w-36 h-24 pointer-events-none select-none">
                         <Image
                           src="/stempel.svg"
                           alt="Stempel Wellen Brothers"
                           fill
-                          sizes="128px"
+                          sizes="144px"
                           className="object-contain mix-blend-multiply"
                         />
                       </div>
 
-                      <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
+                      <div className="absolute top-2 w-36 h-20 pointer-events-none select-none">
                         <Image
                           src={sigSrc}
                           alt={sigAlt}
                           fill
-                          sizes="112px"
+                          sizes="144px"
                           className="object-contain mix-blend-multiply"
                         />
                       </div>
@@ -494,11 +502,13 @@ export default function PrintModal({ invoice, invoices, isOpen, onClose, onPrint
                   );
                 })()}
 
-                <div className="w-48 border-b border-black z-10"></div>
-                <p className="text-[11px] font-bold text-black mt-1 z-10">Authorized Sign,</p>
                 {invoice.approved_by && (
-                  <p className="text-[11px] font-bold text-black mt-0.5 z-10">{invoice.approved_by}</p>
+                  <p className="text-[11px] font-bold text-black tracking-wide z-10 mb-0.5">
+                    {invoice.approved_by}
+                  </p>
                 )}
+                <div className="w-48 border-b border-black z-10"></div>
+                <p className="text-[11px] font-bold text-black mt-1 z-10">Authorized Sign</p>
               </div>
             </div>
 

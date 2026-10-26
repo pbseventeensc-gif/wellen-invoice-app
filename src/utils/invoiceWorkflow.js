@@ -87,3 +87,63 @@ export async function deleteApprovedInvoiceWorkflow(id) {
   });
   if (error) throw error;
 }
+
+export async function clearAllInvoiceData() {
+  // 1. Coba RPC global jika sudah terpasang di database
+  try {
+    const { error } = await supabase.rpc('clear_all_invoice_data');
+    if (!error) return;
+  } catch {}
+
+  // 2. Bersihkan seluruh invoice waiting_approval via RPC bawaan Supabase
+  try {
+    await supabase.rpc('clear_waiting_invoice_workflows');
+  } catch (err) {
+    console.warn('clear_waiting_invoice_workflows fallback:', err);
+  }
+
+  // 3. Bersihkan sisa workflow (approved / rejected) satu per satu
+  try {
+    const workflows = await listInvoiceWorkflows();
+    for (const item of workflows) {
+      if (!item.id) continue;
+      try {
+        await deleteApprovedInvoiceWorkflow(item.id);
+      } catch {
+        try {
+          await removeWaitingInvoiceWorkflow(item.id);
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to clear remaining workflows:', err);
+  }
+
+  // 4. Bersihkan seluruh data POS staging di Supabase
+  try {
+    const { data: stagingRows } = await supabase
+      .from('invoice_staging')
+      .select('source_key');
+
+    if (Array.isArray(stagingRows) && stagingRows.length > 0) {
+      for (const row of stagingRows) {
+        if (!row.source_key) continue;
+        try {
+          await supabase.rpc('delete_invoice_staging_row', {
+            p_source_key: row.source_key,
+          });
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to clear invoice staging rows:', err);
+  }
+
+  // 5. Coba direct delete jika RLS mengizinkan
+  try {
+    await supabase.from('invoice_workflows').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  } catch {}
+  try {
+    await supabase.from('invoice_staging').delete().neq('source_key', '__none__');
+  } catch {}
+}

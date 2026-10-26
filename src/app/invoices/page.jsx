@@ -14,6 +14,7 @@ import {
   Lock,
   Pencil,
   Printer,
+  RotateCcw,
   Search,
   Unlock,
   UserCheck,
@@ -549,17 +550,15 @@ export default function InvoiceListPage() {
 
   const selectedPrintInvoices = printableRows.filter((row) => selectedPrintIds.includes(row.id));
   const visiblePrintableRows = paginatedRows.filter((row) => ['Invoiced', 'Approved'].includes(row.status));
-  const visiblePrintableIds = useMemo(() => visiblePrintableRows.map((r) => r.id), [visiblePrintableRows]);
+  const visiblePrintableIds = visiblePrintableRows.map((r) => r.id);
   const visibleDraftRows = paginatedRows.filter((row) => row.status === 'Draft');
 
   // Drafts that can be selected by the current user (not claimed by other AR)
-  const selectableDrafts = useMemo(() => {
-    return visibleDraftRows.filter((row) => {
-      if (row.claimed_by_id && row.claimed_by_id !== currentUser?.id) return false;
-      return true;
-    });
-  }, [visibleDraftRows, currentUser]);
-  const selectableDraftIds = useMemo(() => selectableDrafts.map((r) => r.id), [selectableDrafts]);
+  const selectableDrafts = visibleDraftRows.filter((row) => {
+    if (row.claimed_by_id && row.claimed_by_id !== currentUser?.id) return false;
+    return true;
+  });
+  const selectableDraftIds = selectableDrafts.map((r) => r.id);
 
   const allActionableSelected = (visiblePrintableRows.length === 0 || visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id)))
     && (selectableDrafts.length > 0 && selectableDrafts.every((row) => selectedDraftIds.includes(row.id)))
@@ -641,11 +640,17 @@ export default function InvoiceListPage() {
     { value: 'grand_total:desc', label: 'Grand total high to low' },
   ];
   const currentSortOption = `${sortBy}:${sortDirection}`;
+
+  const allAmount = matchingRows.reduce((sum, row) => sum + (Number(row.grand_total) || 0), 0);
+  const draftAmount = matchingRows.filter((row) => row.status === 'Draft').reduce((sum, row) => sum + (Number(row.grand_total) || 0), 0);
+  const invoicedAmount = matchingRows.filter((row) => row.status === 'Invoiced').reduce((sum, row) => sum + (Number(row.grand_total) || 0), 0);
+  const approvedAmount = matchingRows.filter((row) => row.status === 'Approved').reduce((sum, row) => sum + (Number(row.grand_total) || 0), 0);
+
   const invoiceCards = [
-    { value: 'ALL', label: 'All records', icon: Layers3, color: 'text-slate-700', iconStyle: 'bg-slate-100 text-slate-600', count: matchingRows.length },
-    { value: 'Draft', label: 'Draft', icon: Clock3, color: 'text-orange-800', iconStyle: 'bg-orange-50 text-orange-700', count: matchingRows.filter((row) => row.status === 'Draft').length },
-    { value: 'Invoiced', label: 'Waiting Approval', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length },
-    { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length },
+    { value: 'ALL', label: 'All records', icon: Layers3, color: 'text-slate-700', iconStyle: 'bg-slate-100 text-slate-600', count: matchingRows.length, amount: allAmount },
+    { value: 'Draft', label: 'Draft', icon: Clock3, color: 'text-orange-800', iconStyle: 'bg-orange-50 text-orange-700', count: matchingRows.filter((row) => row.status === 'Draft').length, amount: draftAmount },
+    { value: 'Invoiced', label: 'Waiting Approval', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length, amount: invoicedAmount },
+    { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length, amount: approvedAmount },
   ];
   const visibleInvoiceCards = role === 'ar created'
     ? invoiceCards.filter((card) => ['Draft', 'Invoiced'].includes(card.value))
@@ -668,6 +673,17 @@ export default function InvoiceListPage() {
     setStatusFilter(status);
     setCurrentPage(1);
     if (status !== 'ALL') markStatusSeen(status);
+  };
+  const handleResetFilters = () => {
+    setFromDate('');
+    setToDate('');
+    setClientFilter('ALL');
+    setStatusFilter(role === 'ar created' ? 'Draft' : 'ALL');
+    setSearch('');
+    setSortBy('import_date');
+    setSortDirection('desc');
+    setClaimFilter('ALL');
+    setCurrentPage(1);
   };
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 pb-20">
@@ -735,6 +751,9 @@ export default function InvoiceListPage() {
                 </span>
               </span>
               <span className={`mt-1.5 block text-2xl font-semibold tracking-tight ${card.color}`}>{card.count}</span>
+              <span className="mt-1 block text-xs font-mono font-medium text-slate-500 truncate" title={formatRupiah(card.amount)}>
+                {formatRupiah(card.amount)}
+              </span>
             </button>
           );
         })}
@@ -848,14 +867,13 @@ export default function InvoiceListPage() {
             />
             <button
               type="button"
-              onClick={() => {
-                setFromDate('');
-                setToDate('');
-                setCurrentPage(1);
-              }}
-              className="h-9 rounded-lg px-2.5 text-xs font-medium text-amber-700 transition hover:bg-amber-50"
+              onClick={handleResetFilters}
+              title="Reset all filters"
+              aria-label="Reset all filters"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 hover:text-amber-700 cursor-pointer"
             >
-              All dates
+              <RotateCcw size={13} className="text-slate-500" />
+              <span>Reset Filter</span>
             </button>
           </div>
 

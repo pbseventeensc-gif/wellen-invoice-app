@@ -11,8 +11,12 @@ import {
   Trash2, 
   Search,
   AlertCircle,
-  Printer
+  Printer,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { normalizeRole } from '@/config/permissions';
 import { formatRupiah } from '@/utils/taxCalculator';
 import WellenLogo from '@/components/common/WellenLogo';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
@@ -26,6 +30,24 @@ import {
   removeWaitingInvoiceWorkflow,
 } from '@/utils/invoiceWorkflow';
 
+function getInternalDppBreakdown(invoice) {
+  if (!invoice) return { goods: 0, printing: 0 };
+  return {
+    goods: Number(
+      invoice.items?.reduce((sum, item) => sum + Number(item.dpp_nilai_lain_barang || 0), 0) ||
+      invoice.total_dpp_nilai_lain_barang ||
+      invoice.dpp_nilai_lain_barang ||
+      0
+    ),
+    printing: Number(
+      invoice.items?.reduce((sum, item) => sum + Number(item.dpp_nilai_lain_jasa_cetak || 0), 0) ||
+      invoice.total_dpp_nilai_lain_jasa_cetak ||
+      invoice.dpp_nilai_lain_jasa_cetak ||
+      0
+    ),
+  };
+}
+
 export default function ApprovalPage() {
   // Initial state harus identik antara server & client untuk mencegah hydration mismatch.
   // Data dari localStorage dimuat lewat loadQueue() di useEffect setelah mount.
@@ -34,6 +56,8 @@ export default function ApprovalPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [showInternalTotal, setShowInternalTotal] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
 
   // Reject Modal State
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
@@ -60,6 +84,23 @@ export default function ApprovalPage() {
     // Sengaja dimuat setelah mount (bukan di initial state) agar tidak terjadi hydration mismatch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadQueue();
+
+    const loadRole = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        setCurrentUserRole(normalizeRole(data?.role));
+      } catch (e) {
+        console.error('Failed to load user role in approval:', e);
+      }
+    };
+    loadRole();
+
     window.addEventListener('wellen-invoice-workflows', loadQueue);
     window.addEventListener('focus', loadQueue);
     return () => {
@@ -69,6 +110,7 @@ export default function ApprovalPage() {
   }, [loadQueue]);
 
   const activeInvoice = queue.find((q) => q.id === selectedId) || queue[0] || null;
+  const canApproveOrReject = currentUserRole === 'approval' || currentUserRole === 'super admin';
 
   const handleApprove = async (invoiceToApprove) => {
     if (!invoiceToApprove) return;
@@ -209,7 +251,7 @@ export default function ApprovalPage() {
               />
             </div>
 
-            {queue.length > 0 && (
+            {queue.length > 0 && canApproveOrReject && (
               <button
                 type="button"
                 onClick={handleDeleteAllQueue}
@@ -305,28 +347,45 @@ export default function ApprovalPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowInternalTotal((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border transition-colors cursor-pointer ${
+                      showInternalTotal
+                        ? 'bg-amber-500 text-stone-950 border-amber-500 shadow-2xs font-bold'
+                        : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-50'
+                    }`}
+                  >
+                    {showInternalTotal ? <EyeOff size={14} /> : <Eye size={14} />}
+                    <span>{showInternalTotal ? 'Hide internal totals' : 'Show internal totals'}</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setIsPrintModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 cursor-pointer"
                   >
                     <Printer size={14} />
                     Print Invoice
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => openRejectModal(activeInvoice.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    <X size={14} className="text-rose-600" />
-                    Reject / Revise
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(activeInvoice)}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
-                  >
-                    <Check size={14} />
-                    Approve
-                  </button>
+                  {canApproveOrReject && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openRejectModal(activeInvoice.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-700 hover:bg-stone-100 text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        <X size={14} className="text-rose-600" />
+                        Reject / Revise
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApprove(activeInvoice)}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                      >
+                        <Check size={14} />
+                        Approve
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -346,8 +405,8 @@ export default function ApprovalPage() {
                       </div>
 
                       <div className="text-[10px] text-black font-medium mt-2 leading-relaxed">
-                        <p>Jl. Pasar Minggu Raya No. 9, Jakarta Selatan</p>
-                        <p>Telp: (021) 7918-0000 | Email: billing@wellenprint.com</p>
+                        <p>Jl. Raya Pasar Minggu No.49, RT.2/RW.7, Duren Tiga, Jakarta Selatan</p>
+                        <p>Phone: (021) 79188868 | Email: finance@wellenprint.com</p>
                       </div>
                     </div>
 
@@ -448,6 +507,23 @@ export default function ApprovalPage() {
 
                 {/* Footer Kertas Invoice */}
                 <div className="mt-auto pt-6 space-y-4">
+                  {showInternalTotal && (() => {
+                    const internalBreakdown = getInternalDppBreakdown(activeInvoice);
+                    return (
+                      <div className="rounded-lg border border-dashed border-amber-500 bg-amber-50/60 p-3 text-[11px] text-black">
+                        <p className="mb-1.5 font-bold uppercase tracking-wide">Internal breakdown — DPP Nilai Lain</p>
+                        <div className="flex justify-between gap-4">
+                          <span>Total DPP Nilai Lain Barang</span>
+                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.goods)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span>Total DPP Nilai Lain Jasa Cetak</span>
+                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.printing)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="grid grid-cols-2 gap-5 items-start">
                     <div className="p-3.5 bg-stone-50/70 rounded-lg border border-stone-200 h-full flex flex-col justify-between">
                       <div>
@@ -526,7 +602,7 @@ export default function ApprovalPage() {
                       </table>
                     </div>
 
-                    <div className="flex flex-col items-center justify-end text-center relative h-28 pb-1">
+                    <div className="flex flex-col items-center justify-end text-center relative h-32 pb-1">
                       {(() => {
                         const isApproved =
                           activeInvoice?.status === 'approved' ||
@@ -544,22 +620,22 @@ export default function ApprovalPage() {
 
                         return (
                           <>
-                            <div className="absolute top-0 w-32 h-24 pointer-events-none select-none">
+                            <div className="absolute top-0 w-36 h-24 pointer-events-none select-none">
                               <Image
                                 src="/stempel.svg"
                                 alt="Stempel Wellen Brothers"
                                 fill
-                                sizes="128px"
+                                sizes="144px"
                                 className="object-contain mix-blend-multiply"
                               />
                             </div>
 
-                            <div className="absolute top-5 w-28 h-14 pointer-events-none select-none">
+                            <div className="absolute top-2 w-36 h-20 pointer-events-none select-none">
                               <Image
                                 src={sigSrc}
                                 alt={sigAlt}
                                 fill
-                                sizes="112px"
+                                sizes="144px"
                                 className="object-contain mix-blend-multiply"
                               />
                             </div>
@@ -567,13 +643,13 @@ export default function ApprovalPage() {
                         );
                       })()}
 
-                      <div className="w-48 border-b border-black z-10"></div>
-                      <p className="text-[11px] text-black font-bold mt-1 z-10">Authorized Sign,</p>
                       {activeInvoice?.approved_by && (
-                        <p className="text-[11px] text-black font-bold mt-0.5 z-10">
+                        <p className="text-[11px] text-black font-bold tracking-wide z-10 mb-0.5">
                           {activeInvoice.approved_by}
                         </p>
                       )}
+                      <div className="w-48 border-b border-black z-10"></div>
+                      <p className="text-[11px] text-black font-bold mt-1 z-10">Authorized Sign</p>
                     </div>
                   </div>
 
@@ -677,6 +753,7 @@ export default function ApprovalPage() {
       <PrintModal
         invoice={activeInvoice}
         isOpen={isPrintModalOpen}
+        initialShowInternal={showInternalTotal}
         onClose={() => setIsPrintModalOpen(false)}
         onPrintConfirmed={(ids) => {
           Promise.all(ids.map((id) => markInvoiceWorkflowPrinted(id)))
