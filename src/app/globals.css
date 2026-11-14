@@ -33,8 +33,8 @@ body {
   top: 0;
   z-index: 10;
   background-color: #f5f5f4;
-  font-size: 13px !important;
-  font-weight: 700 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
   line-height: 1.35;
 }
 
@@ -138,33 +138,507 @@ body {
   font-size: 0.625rem;
 }
 
-@media print {
-  .print-modal-card {
-    max-width: none !important;
-    background: #fff !important;
-  }
+/* More working space for invoice records, with restrained typography. */
+.invoice-workspace .data-table-scroll {
+  max-height: 72vh;
+}
 
-  #print-area {
-    display: block !important;
-    background: #fff !important;
-  }
+.invoice-workspace .data-table thead th {
+  font-weight: 500 !important;
+}
 
-  .print-sheet {
-    display: block;
-    width: 210mm;
-    max-width: none !important;
-    min-height: 0;
-    padding: 12mm 14mm;
-    box-shadow: none;
-  }
+/* Keep recipient, item values and promo text consistent at every density. */
+.print-sheet {
+  --invoice-content-size: 12px;
+}
 
-  .print-sheet.print-density-short {
-    display: flex;
-    flex-direction: column;
-    min-height: 297mm;
-  }
+.print-sheet .print-bill-label,
+.print-sheet .print-client-name,
+.print-sheet .print-sheet-body table thead tr.print-column-headings th,
+.print-sheet .print-client-address {
+  font-size: var(--invoice-content-size);
+  font-weight: 400;
+  line-height: 1.4;
+}
 
-  .print-sheet.print-density-short .invoice-print-footer {
-    margin-top: auto;
+.print-sheet .print-client-address {
+  width: 50%;
+  max-width: 50%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.print-sheet .print-line-items td,
+.print-sheet .print-promo-name {
+  font-size: calc(var(--invoice-content-size) - 1px);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* Display the supplied logo without its surrounding white margins. */
+.invoice-letterhead-logo {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  max-width: 100%;
+  aspect-ratio: 280 / 126;
+  overflow: hidden;
+}
+
+.invoice-letterhead-logo img {
+  position: absolute;
+  left: -14%;
+  top: -93%;
+  width: 126.43%;
+  max-width: none;
+  height: auto;
+}
+
+.print-sheet .print-sheet-body table thead tr.print-column-headings th.print-description-heading {
+  font-size: calc(var(--invoice-content-size) - 1px);
+}
+
+/* A4 reference layout: one primary item, with internal totals hidden. */
+.print-sheet.print-single-item {
+  min-height: 297mm;
+  padding: 17mm 14mm 7mm;
+}
+
+.print-sheet .invoice-line-table {
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+}
+
+.print-single-item .print-letterhead-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 4mm;
+  row-gap: 3mm;
+}
+
+.print-single-item .print-letterhead-company {
+  width: auto;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.print-single-item .print-letterhead-logo-row {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.print-single-item .print-letterhead-number {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.print-single-item .print-letterhead-contact {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 0;
+  line-height: 1.6;
+}
+
+.print-sheet.print-single-item .invoice-line-table thead tr:first-child th {
+  padding: 0 3mm 4mm;
+  border-bottom: 1px solid #000;
+}
+
+.print-sheet.print-single-item .invoice-line-table thead tr:nth-child(2) th {
+  height: 25mm;
+  padding: 3mm;
+  vertical-align: middle;
+}
+
+.print-sheet.print-single-item .invoice-line-table thead tr.print-column-headings th {
+  height: 11mm;
+  padding: 3mm;
+}
+
+.print-sheet.print-single-item .print-line-items td {
+  height: 10.5mm;
+  padding: 3mm;
+}
+
+.print-sheet.print-single-item .invoice-print-footer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin-top: 11mm !important;
+  padding-top: 0;
+}
+
+.print-single-item .invoice-print-footer > * {
+  margin-block: 0;
+}
+
+.print-single-item .invoice-summary {
+  align-items: stretch;
+  min-height: 36mm;
+  gap: 6mm;
+}
+
+.print-single-item .invoice-payment {
+  margin-top: auto;
+  padding-top: 8mm;
+  gap: 6mm;
+}
+
+.print-single-item .invoice-notes {
+  margin-top: 4mm;
+}
+
+.print-single-item .invoice-notes p {
+  white-space: normal;
+}
+
+/* Use the same proportions in the Approval screen's inline preview. */
+.approval-single-item {
+  aspect-ratio: 210 / 297;
+  min-height: 0;
+}
+
+.approval-single-item > .space-y-4 {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.approval-single-item .approval-letterhead {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 1rem;
+  row-gap: 0.75rem;
+}
+
+.approval-single-item .approval-letterhead > div:first-child {
+  display: contents;
+}
+
+.approval-single-item .approval-letterhead > div:first-child > div:last-child {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 0;
+}
+
+.approval-single-item .approval-letterhead > div:last-child {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.approval-single-item .approval-summary {
+  align-items: stretch;
+  margin-top: 2rem;
+}
+
+.approval-single-item .approval-payment {
+  margin-top: auto;
+  padding-top: 2rem;
+}
+
+.approval-single-item .approval-notes p {
+  white-space: normal;
+}
+
+.print-letterhead-layout > .print-letterhead-contact {
+  width: 100%;
+}
+.print-letterhead-layout {
+  flex-wrap: wrap;
+}
+
+/* The first letterhead rule is thin; the lower rule is heavier. */
+.invoice-letterhead-cell,
+.approval-letterhead {
+  position: relative;
+  border-bottom: 1.5pt solid #000 !important;
+}
+
+.invoice-letterhead-cell::after,
+.approval-letterhead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  border-top: 0.5pt solid #000;
+}
+
+.print-single-item .invoice-bottom {
+  margin-top: auto;
+}
+
+.invoice-bottom .invoice-notes {
+  margin-top: 4mm;
+}
+
+/* Keep summary cards close to the table when internal totals are hidden. */
+.print-sheet.print-internal-hidden .invoice-print-footer {
+  margin-top: 6mm !important;
+  padding-top: 0;
+}
+
+.approval-internal-hidden {
+  justify-content: flex-start;
+}
+
+.approval-internal-hidden > .space-y-4 {
+  flex: none;
+}
+
+.approval-internal-hidden .approval-footer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin-top: 6mm;
+  padding-top: 0;
+}
+
+.approval-internal-hidden .approval-summary {
+  margin-top: 0;
+}
+
+.approval-internal-hidden .approval-payment {
+  margin-top: auto;
+}
+
+.approval-internal-hidden .approval-notes {
+  margin-top: 1rem;
+}
+
+/* Close both outside edges of the item grid, including the header. */
+.print-sheet .print-column-headings > th:first-child,
+.print-sheet .print-line-items > tr > td:first-child,
+.approval-line-table tr > :first-child {
+  border-left: 1px solid #a8a29e;
+}
+
+.print-sheet .print-column-headings > th:last-child,
+.print-sheet .print-line-items > tr > td:last-child,
+.approval-line-table tr > :last-child {
+  border-right: 1px solid #a8a29e;
+}
+
+/* Letterhead and recipient remain unframed in both Show and Hide modes. */
+.print-sheet .invoice-line-table thead tr:not(.print-column-headings) > th {
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+}
+
+/* Compact data headings; invoice print typography stays separate. */
+.data-table thead th {
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  padding-inline: 0.5rem;
+}
+
+.data-table tbody td {
+  padding-inline: 0.5rem;
+  font-size: 12px;
+}
+
+.pos-breakdown-table thead th {
+  padding: 0.625rem 0.5rem;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.pos-breakdown-table tbody td,
+.pos-breakdown-table tfoot td {
+  padding: 0.5rem;
+}
+
+/* Compact Excel uploader inspired by the supplied file-import reference. */
+.excel-upload-panel {
+  width: 100%;
+  max-width: 32rem;
+}
+
+.excel-upload-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  min-height: 148px;
+  padding: 1.25rem 1.5rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #fafcfb;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.excel-upload-card[data-state='dragging'] {
+  border-color: #7ca28f;
+  background: #eff7f2;
+}
+
+.excel-upload-card[data-state='ready'] {
+  border-color: #b5cebe;
+}
+
+.excel-upload-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 66px;
+  height: 66px;
+  border-radius: 16px;
+  background: #eef5f0;
+  color: #61836d;
+}
+
+.excel-upload-cloud {
+  transition: transform 220ms ease;
+}
+
+.excel-upload-card:hover .excel-upload-cloud,
+.excel-upload-card[data-state='dragging'] .excel-upload-cloud {
+  transform: translateY(-4px);
+}
+
+.excel-upload-indicator {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border: 3px solid #fafcfb;
+  border-radius: 50%;
+  background: #e1eee6;
+  color: #4b735c;
+  animation: excel-indicator-in 220ms ease-out both;
+}
+
+.excel-upload-file {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid #e2e8e5;
+  border-radius: 12px;
+  background: #fff;
+  animation: excel-file-in 260ms ease-out both;
+}
+
+.excel-upload-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #eff3f0;
+}
+
+.excel-upload-progress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #8bad98;
+}
+
+.excel-upload-panel[data-state='reading'] .excel-upload-progress > span {
+  width: 35%;
+  animation: excel-read-progress 1.2s ease-in-out infinite;
+}
+
+@keyframes excel-indicator-in {
+  from { opacity: 0; transform: scale(0.65); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes excel-file-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes excel-read-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(386%); }
+}
+
+@media (max-width: 480px) {
+  .excel-upload-card { gap: 1rem; padding: 1.1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .excel-upload-panel,
+  .excel-upload-panel * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Lay out the upload, file status and import metadata in the available pane. */
+.excel-import-workspace {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.import-overview {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.import-metadata {
+  min-width: 0;
+}
+
+@container (min-width: 760px) {
+  .import-overview[data-ready='true'] {
+    grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+    align-items: stretch;
+  }
+  .import-overview[data-ready='true'] .excel-upload-panel {
+    display: contents;
+  }
+  .import-overview[data-ready='true'] .excel-upload-card {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .import-overview[data-ready='true'] .excel-upload-file {
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: 0;
+  }
+  .import-overview[data-ready='true'] .import-metadata {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    gap: 8px;
+  }
+  .import-overview[data-ready='true'] .import-metadata > * {
+    margin-block: 0;
+  }
+}
+
+/* Keep wide tables inside their own scroll area on phones and tablets. */
+.app-workspace > *,
+.app-workspace .overflow-x-auto,
+.app-workspace .data-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-workspace .overflow-x-auto,
+.app-workspace .data-table-scroll {
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 639px) {
+  .excel-upload-card { min-height: 132px; }
+  .import-metadata > .grid { grid-template-columns: minmax(0, 1fr); }
+  .app-workspace input,
+  .app-workspace select,
+  .app-workspace textarea {
+    max-width: 100%;
   }
 }

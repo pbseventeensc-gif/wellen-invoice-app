@@ -28,8 +28,8 @@ export default function LoginForm({ initialError = null }) {
       if (error) {
         setErrorMsg(
           error.message === 'Invalid login credentials'
-            ? 'Email atau password salah.'
-            : 'Login gagal diverifikasi. Periksa koneksi Anda dan coba lagi.'
+            ? 'Incorrect email or password.'
+            : 'Could not verify your sign-in. Check your connection and try again.'
         );
         return;
       }
@@ -39,10 +39,10 @@ export default function LoginForm({ initialError = null }) {
         return;
       }
 
-      setErrorMsg('Gagal memulai sesi login. Silakan coba lagi.');
+      setErrorMsg('Could not start your session. Please try again.');
     } catch (err) {
       console.error('Supabase login request failed:', err);
-      setErrorMsg('Login tidak dapat diverifikasi. Periksa koneksi Anda dan coba lagi.');
+      setErrorMsg('Could not verify your sign-in. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,7 @@ export default function LoginForm({ initialError = null }) {
             <LockKeyhole size={20} strokeWidth={1.7} />
           </div>
           <h1 className="mt-4 text-xl font-semibold tracking-tight text-slate-950">Sign in with email</h1>
-          <p className="mt-1 text-xs leading-5 text-slate-600">Masuk untuk membuka workspace invoice.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Sign in to access your invoice workspace.</p>
         </div>
 
         {/* Notifikasi Error */}

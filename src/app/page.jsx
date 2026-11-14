@@ -1,5 +1,7 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -68,9 +70,9 @@ export default function HomePage() {
         </div>
       )}
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoicing Dashboard</h1>
+          <PageHeading title="Invoicing Dashboard" />
           <p className="text-xs text-stone-600 mt-1 font-normal">
             Real-time overview of POS WPP imports, automated invoice processing, and authorization queues.
           </p>
@@ -175,7 +177,7 @@ export default function HomePage() {
             </div>
             <h2 className="text-base font-bold text-stone-900">DJP e-Faktur & Accounting Reports</h2>
             <p className="text-xs text-stone-600 leading-relaxed font-normal">
-              Generate DJP-compliant e-Faktur Pajak CSV files and review complete financial receivables and realization analytics.
+              Generate DJP-compliant e-Faktur tax CSV files and review complete financial receivables and realization analytics.
             </p>
           </div>
 

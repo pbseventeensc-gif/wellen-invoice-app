@@ -81,7 +81,7 @@ export default function ApprovedInvoiceSidebar() {
                 Approved Invoices
               </h2>
               <p className="text-[10px] text-stone-400 font-normal">
-                {approvedList.length} faktur siap cetak / unduh
+                {approvedList.length} invoices ready to print / download
               </p>
             </div>
           </div>
@@ -100,7 +100,7 @@ export default function ApprovedInvoiceSidebar() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
-              placeholder="Cari No. Invoice / PT..."
+              placeholder="Search invoice number or company..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-amber-500 text-stone-800 placeholder:text-stone-400"
@@ -113,7 +113,7 @@ export default function ApprovedInvoiceSidebar() {
           {filteredList.length === 0 ? (
             <div className="text-center py-12 text-stone-400 space-y-2">
               <FileText size={36} className="mx-auto text-stone-300 stroke-[1.5]" />
-              <p className="text-xs font-medium text-stone-600">Belum ada invoice yang disetujui</p>
+              <p className="text-xs font-medium text-stone-600">No approved invoices yet</p>
             </div>
           ) : (
             filteredList.map((inv) => (
@@ -154,7 +154,7 @@ export default function ApprovedInvoiceSidebar() {
                     className="inline-flex items-center gap-1 bg-stone-100 hover:bg-amber-500 hover:text-stone-950 text-stone-700 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
                   >
                     <Printer size={12} />
-                    <span>Cetak</span>
+                    <span>Print</span>
                   </button>
                 </div>
               </div>

@@ -1,5 +1,7 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -18,6 +20,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { normalizeRole } from '@/config/permissions';
 import { formatRupiah } from '@/utils/taxCalculator';
+import { isSingleItemLayout } from '@/utils/printFormatting';
 import WellenLogo from '@/components/common/WellenLogo';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import PrintModal from '@/components/invoice-print/PrintModal';
@@ -229,8 +232,8 @@ export default function ApprovalPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-12 relative">
-      <div className="pb-2 border-b border-stone-200/80">
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Approval Queue</h1>
+      <div className="pb-4 border-b border-slate-200">
+        <PageHeading title="Approval Queue" />
         <p className="text-xs text-stone-500 mt-1 font-normal">
           Verify invoice details, DPP calculations, and overall amounts before final authorization.
         </p>
@@ -390,23 +393,17 @@ export default function ApprovalPage() {
               </div>
 
               {/* Kertas Invoice Preview */}
-              <div className="p-8 text-black text-xs flex flex-col justify-between min-h-[750px] bg-white font-normal">
+              <div className={`p-8 text-black text-xs flex flex-col justify-between min-h-[750px] bg-white font-normal ${!showInternalTotal ? 'approval-internal-hidden' : ''} ${isSingleItemLayout(activeInvoice, showInternalTotal) ? 'approval-single-item' : ''}`}>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-start border-b border-stone-300 pb-3">
-                    <div>
+                  <div className="approval-letterhead flex justify-between items-start border-b border-stone-300 pb-3">
+                    <div className="w-1/2 min-w-0">
                       <div className="flex items-center gap-3">
                         <WellenLogo />
-                        <div className="flex flex-col justify-center">
-                          <h2 className="text-xl tracking-tight text-black font-bold leading-none">WELLEN PRINT</h2>
-                          <p className="text-[11px] text-black font-medium leading-tight mt-1.5">
-                            Digital Printing & Offset Services
-                          </p>
-                        </div>
                       </div>
 
-                      <div className="text-[10px] text-black font-medium mt-2 leading-relaxed">
-                        <p>Jl. Raya Pasar Minggu No.49, RT.2/RW.7, Duren Tiga, Jakarta Selatan</p>
-                        <p>Phone: (021) 79188868 | Email: finance@wellenprint.com</p>
+                      <div className="text-[10px] text-black font-medium mt-2 leading-relaxed break-words">
+                        <p>Jl. Raya Pasar Minggu No.49, RT.2/RW.7<br />Duren Tiga, Jakarta Selatan</p>
+                        <p>Phone : 021-7988314 | Email : finance@wellenprint.com</p>
                       </div>
                     </div>
 
@@ -420,11 +417,11 @@ export default function ApprovalPage() {
                   </div>
 
                   <div className="p-3.5 bg-stone-50/70 rounded-lg border border-stone-200">
-                    <span className="text-[10px] text-black uppercase tracking-wider block mb-0.5 font-bold">
-                      BILL TO:
+                    <span className="text-xs text-black uppercase tracking-wider block mb-0.5 font-bold">
+                      BILL TO :
                     </span>
                     <p className="text-black text-xs font-bold">{activeInvoice.client_name}</p>
-                    <p className="text-black font-medium text-[11px] whitespace-pre-line mt-0.5 leading-relaxed">
+                    <p className="w-full sm:w-1/2 text-black font-medium text-xs whitespace-pre-line break-words mt-0.5 leading-relaxed">
                       {activeInvoice.client_address}
                     </p>
                   </div>
@@ -434,11 +431,11 @@ export default function ApprovalPage() {
                     const isPoSource = activeInvoice.importSource === 'po' || activeInvoice.items?.some((it) => it.isPoSource || (it.uom && it.uom !== 'PCS'));
 
                     return (
-                      <table className="w-full text-left border-collapse border border-stone-300 text-xs">
+                      <table className="approval-line-table w-full text-left border-collapse border border-stone-300 text-xs">
                         <thead className="bg-stone-100/80 text-black font-bold border-b border-stone-300">
                           <tr>
                             <th className="py-2 px-3 border-r border-stone-300 w-10 text-center text-black font-bold">No</th>
-                            <th className="py-2 px-3 border-r border-stone-300 text-black font-bold">ITEM DESCRIPTION</th>
+                            <th className="py-2 px-3 border-r border-stone-300 text-black font-bold text-[11px]">ITEM DESCRIPTION</th>
                             {isPoSource && (
                               <>
                                 <th className="py-2 px-2.5 border-r border-stone-300 w-16 text-center text-black font-bold">QTY</th>
@@ -448,7 +445,7 @@ export default function ApprovalPage() {
                             <th className="py-2 px-3 text-right w-40 text-black font-bold">TOTAL PRICE</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-stone-300">
+                        <tbody className="divide-y divide-stone-300 text-[11px]">
                           {activeInvoice.items?.map((it, idx) => (
                             <tr key={it.id || idx}>
                               <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">{idx + 1}</td>
@@ -484,7 +481,7 @@ export default function ApprovalPage() {
                               return (
                                 <tr className="bg-stone-50/50 text-black">
                                   <td className="py-2 px-3 text-center border-r border-stone-300 text-black font-medium">*</td>
-                                  <td className="py-2 px-3 border-r border-stone-300 text-black font-bold">JASA CETAK</td>
+                                  <td className="py-2 px-3 border-r border-stone-300 text-black font-bold">PRINTING SERVICE</td>
                                   {isPoSource && (
                                     <>
                                       <td className="py-2 px-2.5 text-center border-r border-stone-300 font-mono text-black font-bold">1</td>
@@ -506,31 +503,16 @@ export default function ApprovalPage() {
                 </div>
 
                 {/* Footer Kertas Invoice */}
-                <div className="mt-auto pt-6 space-y-4">
-                  {showInternalTotal && (() => {
-                    const internalBreakdown = getInternalDppBreakdown(activeInvoice);
-                    return (
-                      <div className="rounded-lg border border-dashed border-amber-500 bg-amber-50/60 p-3 text-[11px] text-black">
-                        <p className="mb-1.5 font-bold uppercase tracking-wide">Internal breakdown — DPP Nilai Lain</p>
-                        <div className="flex justify-between gap-4">
-                          <span>Total DPP Nilai Lain Barang</span>
-                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.goods)}</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span>Total DPP Nilai Lain Jasa Cetak</span>
-                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.printing)}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                <div className="approval-footer mt-auto pt-6 space-y-4">
 
-                  <div className="grid grid-cols-2 gap-5 items-start">
+
+                  <div className="approval-summary grid grid-cols-2 gap-5 items-start">
                     <div className="p-3.5 bg-stone-50/70 rounded-lg border border-stone-200 h-full flex flex-col justify-between">
                       <div>
                         <span className="text-[10px] text-black uppercase tracking-wider block mb-1 font-bold">
                           FILE NAME:
                         </span>
-                        <p className="text-black text-xs font-bold">{activeInvoice.promo_name || '-'}</p>
+                        <p className="text-black text-[11px] font-bold">{activeInvoice.promo_name || '-'}</p>
                       </div>
                       <div className="mt-3 pt-2 border-t border-stone-200/80 text-[11px] text-black font-medium">
                         <p>
@@ -576,7 +558,23 @@ export default function ApprovalPage() {
                   </div>
 
                   {/* Payment Info & Stamp */}
-                  <div className="grid grid-cols-2 gap-5 items-end mb-3">
+                  {showInternalTotal && (() => {
+                    const internalBreakdown = getInternalDppBreakdown(activeInvoice);
+                    return (
+                      <div className="rounded-lg border border-dashed border-amber-500 bg-amber-50/60 p-3 text-[11px] text-black">
+                        <p className="mb-1.5 font-bold uppercase tracking-wide">Internal breakdown — Alternative Tax Base</p>
+                        <div className="flex justify-between gap-4">
+                          <span>Total Alternative Tax Base — Goods</span>
+                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.goods)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span>Total Alternative Tax Base — Printing Service</span>
+                          <span className="font-mono font-bold">{formatRupiah(internalBreakdown.printing)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div className="approval-payment grid grid-cols-2 gap-5 items-end mb-3">
                     <div className="space-y-1.5">
                       <span className="text-xs tracking-wider block text-black uppercase font-bold">
                         PAYMENT INFO
@@ -602,7 +600,7 @@ export default function ApprovalPage() {
                       </table>
                     </div>
 
-                    <div className="flex flex-col items-center justify-end text-center relative h-32 pb-1">
+                    <div className="ml-auto w-48 max-w-full flex flex-col items-center justify-end text-center relative h-48 pb-1">
                       {(() => {
                         const isApproved =
                           activeInvoice?.status === 'approved' ||
@@ -620,22 +618,22 @@ export default function ApprovalPage() {
 
                         return (
                           <>
-                            <div className="absolute top-0 w-36 h-24 pointer-events-none select-none">
+                            <div className="absolute top-4 w-48 max-w-full h-36 pointer-events-none select-none">
                               <Image
                                 src="/stempel.svg"
                                 alt="Stempel Wellen Brothers"
                                 fill
-                                sizes="144px"
+                                sizes="192px"
                                 className="object-contain mix-blend-multiply"
                               />
                             </div>
 
-                            <div className="absolute top-2 w-36 h-20 pointer-events-none select-none">
+                            <div className="absolute top-12 w-40 max-w-full h-24 pointer-events-none select-none">
                               <Image
                                 src={sigSrc}
                                 alt={sigAlt}
                                 fill
-                                sizes="144px"
+                                sizes="160px"
                                 className="object-contain mix-blend-multiply"
                               />
                             </div>
@@ -644,16 +642,16 @@ export default function ApprovalPage() {
                       })()}
 
                       {activeInvoice?.approved_by && (
-                        <p className="text-[11px] text-black font-bold tracking-wide z-10 mb-0.5">
+                        <p className="w-48 max-w-full text-center text-[11px] text-black font-bold tracking-wide z-10 mb-0.5">
                           {activeInvoice.approved_by}
                         </p>
                       )}
-                      <div className="w-48 border-b border-black z-10"></div>
-                      <p className="text-[11px] text-black font-bold mt-1 z-10">Authorized Sign</p>
+                      <div className="w-48 max-w-full border-b border-black z-10"></div>
+                      <p className="w-48 max-w-full text-center text-[11px] text-black font-bold mt-1 z-10">Authorized Sign</p>
                     </div>
                   </div>
 
-                  <div className="border-t border-black pt-2.5">
+                  <div className="approval-notes border-t border-black pt-2.5">
                     <p className="text-black text-[10px] mb-1 font-bold">
                       Note :
                     </p>
@@ -666,6 +664,7 @@ export default function ApprovalPage() {
                       </p>
                     </div>
                   </div>
+
                 </div>
               </div>
             </div>

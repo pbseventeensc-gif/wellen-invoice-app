@@ -1,5 +1,7 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
 import { useState, useEffect, useMemo } from 'react';
 import {
   Download,
@@ -8,6 +10,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { buildFakturExportRows, invoiceDpp, fakturNumber } from '@/utils/fakturExport';
 import { formatRupiah } from '@/utils/taxCalculator';
 import TablePagination from '@/components/ui/TablePagination';
 import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
@@ -32,12 +35,7 @@ export default function EfakturExportPage() {
   const pageSize = 8;
   const [nsfpStart, setNsfpStart] = useState('010.000-26.00000001');
 
-  const [npwpMap, setNpwpMap] = useState({
-    'PT. Foods Beverages Indonesia': '01.345.678.9-012.000',
-    'PT ASPIRASI HIDUP INDONESIA TBK': '01.234.567.8-011.000',
-    'PT. PMG INTEGRASI KOMUNIKASI': '02.111.222.3-015.000',
-    'PT DIGITAL CREATIVE ASIA': '03.444.555.6-020.000',
-  });
+  const [npwpMap, setNpwpMap] = useState({});
 
   const loadData = async () => {
     try {
@@ -89,7 +87,7 @@ export default function EfakturExportPage() {
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   const totalDpp = useMemo(() => {
-    return selectedInvoices.reduce((sum, i) => sum + Number(i.subtotal_net || i.total_harga_net || 0), 0);
+    return selectedInvoices.reduce((sum, i) => sum + invoiceDpp(i), 0);
   }, [selectedInvoices]);
 
   const totalPpn = useMemo(() => {
@@ -118,29 +116,32 @@ export default function EfakturExportPage() {
 
     let csvContent = 'FK,KD_JENIS_TRANSAKSI,FG_PENGGANTI,NOMOR_FAKTUR,MASA_PAJAK,TAHUN_PAJAK,TANGGAL_FAKTUR,NPWP,NAMA,ALAMAT_LENGKAP,JUMLAH_DPP,JUMLAH_PPN,JUMLAH_PPNBM,ID_KETERANGAN_TAMBAHAN,FG_UANG_MUKA,UANG_MUKA_DPP,UANG_MUKA_PPN,UANG_MUKA_PPNBM,REFERENSI\n';
 
-    const nsfpBase = nsfpStart.replace(/[^0-9]/g, '');
-    const prefix = nsfpStart.slice(0, 11);
-    const startNum = parseInt(nsfpBase.slice(-8), 10) || 1;
+    let exportData;
+    try {
+      exportData = buildFakturExportRows(invoices, selectedIds, nsfpStart, npwpMap);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
 
-    selectedInvoices.forEach((inv, idx) => {
-      const generatedNsfp = `${prefix}${String(startNum + idx).padStart(8, '0')}`;
-      const npwpClean = (npwpMap[inv.client_name] || '01.234.567.8-012.000').replace(/[^0-9]/g, '');
-      const dateStr = inv.invoice_date || inv.time_created?.slice(0, 10) || '2026-09-10';
+    exportData.forEach(({ invoice: inv, number: generatedNsfp }) => {
+      const npwpClean = (npwpMap[inv.client_name] || '').replace(/[^0-9]/g, '');
+      const dateStr = inv.invoice_date || inv.time_created?.slice(0, 10);
       const [year, month] = dateStr.split('-');
 
-      const dpp = Math.round(Number(inv.subtotal_net || inv.total_harga_net || 0));
+      const dpp = Math.round(invoiceDpp(inv));
       const ppn = Math.round(Number(inv.ppn_amount || 0));
-      const address = (inv.client_address || 'JAKARTA').replace(/\s+/g, ' ').trim();
+      const address = inv.client_address.replace(/\s+/g, ' ').trim();
       const row = [
         'FK',
         '01',
         '0',
         toCsvTextCell(generatedNsfp),
-        toCsvTextCell(month || '09'),
-        toCsvTextCell(year || '2026'),
+        toCsvTextCell(month),
+        toCsvTextCell(year),
         toCsvTextCell(dateStr),
         toCsvTextCell(npwpClean),
-        toCsvTextCell(inv.client_name || 'CLIENT'),
+        toCsvTextCell(inv.client_name),
         toCsvTextCell(address),
         String(dpp),
         String(ppn),
@@ -163,6 +164,7 @@ export default function EfakturExportPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleExportExcel = () => {
@@ -171,29 +173,32 @@ export default function EfakturExportPage() {
       return;
     }
 
-    const nsfpBase = nsfpStart.replace(/[^0-9]/g, '');
-    const prefix = nsfpStart.slice(0, 11);
-    const startNum = parseInt(nsfpBase.slice(-8), 10) || 1;
+    let exportData;
+    try {
+      exportData = buildFakturExportRows(invoices, selectedIds, nsfpStart, npwpMap);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
 
-    const exportRows = selectedInvoices.map((inv, idx) => {
-      const generatedNsfp = `${prefix}${String(startNum + idx).padStart(8, '0')}`;
+    const exportRows = exportData.map(({ invoice: inv, number: generatedNsfp }, idx) => {
       return {
         No: idx + 1,
-        'Tanggal Faktur': inv.invoice_date || inv.time_created?.slice(0, 10),
-        'Nomor Seri Faktur Pajak (NSFP)': generatedNsfp,
-        'Nomor Invoice WPP': safeSpreadsheetText(inv.invoice_number),
-        'NPWP Klien': safeSpreadsheetText(npwpMap[inv.client_name] || '01.234.567.8-012.000'),
-        'Nama PKP Klien / PT': safeSpreadsheetText(inv.client_name),
-        'Nilai DPP (Net)': Number(inv.subtotal_net || inv.total_harga_net || 0),
-        'PPN Keluaran (11%)': Number(inv.ppn_amount || 0),
-        'Grand Total Tagihan': Number(inv.grand_total || inv.grandTotal || 0),
-        'Status Pelaporan DJP': 'Ready for DJP Upload',
+        'Invoice Date': inv.invoice_date || inv.time_created?.slice(0, 10),
+        'Tax Invoice Serial Number (NSFP)': generatedNsfp,
+        'WPP Invoice Number': safeSpreadsheetText(inv.invoice_number),
+        'Client Tax ID (NPWP)': safeSpreadsheetText(npwpMap[inv.client_name] || ''),
+        'Client / Company Name': safeSpreadsheetText(inv.client_name),
+        'Tax Base (Net)': invoiceDpp(inv),
+        'Output VAT (11%)': Number(inv.ppn_amount || 0),
+        'Invoice Grand Total': Number(inv.grand_total || inv.grandTotal || 0),
+        'DJP Filing Status': 'Ready for DJP Upload',
       };
     });
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'e-Faktur Pajak Keluaran');
+    XLSX.utils.book_append_sheet(wb, ws, 'Output Tax Invoices');
     XLSX.writeFile(wb, `eFaktur_Tax_Summary_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
@@ -205,14 +210,11 @@ export default function EfakturExportPage() {
         </div>
       )}
       {/* Header Navigasi */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-stone-200/80 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 gap-3">
         <div>
-          <div className="text-[12px] text-stone-400 font-normal">
-            Tax & Compliance &rsaquo; <span className="text-stone-600">DJP e-Faktur Pajak Exporter</span>
-          </div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight mt-0.5">DJP e-Faktur Pajak Exporter</h1>
+          <PageHeading title="DJP e-Faktur Exporter" />
           <p className="text-xs text-stone-500 mt-0.5 font-normal">
-            Export approved taxable invoices directly to DJP e-Faktur CSV format (Faktur Pajak Keluaran FK) for DJP Online filing.
+            Export approved taxable invoices directly to DJP e-Faktur CSV format (output tax invoice FK) for DJP Online filing.
           </p>
         </div>
 
@@ -250,7 +252,7 @@ export default function EfakturExportPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
-            TOTAL NET VALUE (DPP PAJAK)
+            TOTAL NET VALUE (TAX BASE)
           </span>
           <p className="text-xl font-mono text-stone-900 font-normal">
             {formatRupiah(totalDpp)}
@@ -259,7 +261,7 @@ export default function EfakturExportPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/90 shadow-2xs">
           <span className="text-[10px] font-normal text-stone-400 uppercase tracking-wider block mb-1">
-            TOTAL PPN KELUARAN (11%)
+            TOTAL OUTPUT VAT (11%)
           </span>
           <p className="text-xl font-mono text-stone-900 font-normal">
             {formatRupiah(totalPpn)}
@@ -319,9 +321,9 @@ export default function EfakturExportPage() {
                 <th className="py-3.5 px-4 w-36 font-normal">DATE</th>
                 <th className="py-3.5 px-4 w-44 font-normal">INVOICE NO</th>
                 <th className="py-3.5 px-4 font-normal">CLIENT PT ENTITY</th>
-                <th className="py-3.5 px-4 w-48 font-normal">NPWP KLIEN (EDITABLE)</th>
+                <th className="py-3.5 px-4 w-48 font-normal">CLIENT TAX ID (EDITABLE)</th>
                 <th className="py-3.5 px-4 text-right w-36 font-normal">NET (DPP)</th>
-                <th className="py-3.5 px-4 text-right w-32 font-normal">PPN 11%</th>
+                <th className="py-3.5 px-4 text-right w-32 font-normal">VAT 11%</th>
                 <th className="py-3.5 px-4 text-right w-36 font-normal">GRAND TOTAL</th>
                 <th className="py-3.5 px-4 text-center w-40 font-normal">NSFP GENERATED</th>
               </tr>
@@ -337,10 +339,7 @@ export default function EfakturExportPage() {
                 paginatedInvoices.map((inv, idx) => {
                   const rowNumber = (visiblePage - 1) * pageSize + idx + 1;
                   const isSelected = selectedIds.includes(inv.id);
-                  const nsfpBase = nsfpStart.replace(/[^0-9]/g, '');
-                  const prefix = nsfpStart.slice(0, 11);
-                  const startNum = parseInt(nsfpBase.slice(-8), 10) || 1;
-                  const generatedNsfp = `${prefix}${String(startNum + rowNumber - 1).padStart(8, '0')}`;
+                  const generatedNsfp = fakturNumber(nsfpStart, invoices.findIndex((item) => item.id === inv.id)) || 'Invalid NSFP';
 
                   return (
                     <tr
@@ -370,13 +369,13 @@ export default function EfakturExportPage() {
                       <td className="py-3.5 px-4">
                         <input
                           type="text"
-                          value={npwpMap[inv.client_name] || '01.234.567.8-012.000'}
+                          value={npwpMap[inv.client_name] || ''}
                           onChange={(e) => handleNpwpChange(inv.client_name, e.target.value)}
                           className="w-full px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-mono font-normal text-stone-800 outline-none focus:border-[#578ef5] focus:bg-white"
                         />
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono text-stone-900 font-normal whitespace-nowrap">
-                        {formatRupiah(inv.subtotal_net || inv.total_harga_net || 0)}
+                        {formatRupiah(invoiceDpp(inv))}
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-normal text-stone-900 whitespace-nowrap">
                         {formatRupiah(inv.ppn_amount || 0)}

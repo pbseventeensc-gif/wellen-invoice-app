@@ -4,6 +4,7 @@ const ALL_MODULE_PAGES = [
   '/',
   '/import',
   '/master-pos',
+  '/clients',
   '/create-invoice',
   '/approval',
   '/status-approval',
@@ -22,6 +23,7 @@ export const ROLE_PERMISSIONS = {
     allowedPages: [
       '/invoices',
       '/create-invoice',
+      '/clients',
       '/status-approval',
       '/approval',
       '/import',
@@ -37,6 +39,7 @@ export const ROLE_PERMISSIONS = {
       '/',
       '/invoices',
       '/approved-invoices',
+      '/clients',
       '/accounting-reports',
       '/efaktur-export',
     ],

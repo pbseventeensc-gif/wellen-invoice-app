@@ -145,6 +145,12 @@ export default function IconRail({ isSubpanelOpen, onToggleSubpanel }) {
             <Database size={20} />
           </Link>}
 
+          {isRouteAllowed(role, '/clients') && (
+            <Link href="/clients" title="Clients" aria-label="Client directory" className={`rounded-lg p-2 transition-all ${pathname === '/clients' ? 'bg-amber-400/15 text-amber-300' : 'hover:bg-slate-800 hover:text-white'}`}>
+              <Users size={20} />
+            </Link>
+          )}
+
           {/* Statuses and approval actions are consolidated in Invoices */}
           {isRouteAllowed(role, '/invoices') && <Link
             href="/invoices"

@@ -1,5 +1,7 @@
 'use client';
 
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
@@ -14,7 +16,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatRupiah, parseCurrencyNumber, parseExcelDate } from '@/utils/taxCalculator';
-import { listInvoiceStaging, saveInvoiceStagingRows } from '@/utils/invoiceStaging';
+import { listInvoiceStaging, saveInvoiceStagingRows, claimInvoiceStagingRows } from '@/utils/invoiceStaging';
 
 const PDF_MAX_BYTES = 20 * 1024 * 1024;
 const PDF_MAX_PAGES = 100;
@@ -206,7 +208,7 @@ export default function ClientPoTab() {
 
     if (fileNameLower.endsWith('.pdf')) {
       if (file.size > PDF_MAX_BYTES) {
-        setPoImportMessage('Ukuran PDF maksimal 20 MB. PO belum diproses.');
+        setPoImportMessage('PDF files must be 20 MB or smaller. The purchase order has not been processed.');
         return;
       }
 
@@ -251,17 +253,17 @@ export default function ClientPoTab() {
         if (parsedItems.length === 0) {
           setPoImportMessage(
             lines.length < 3
-              ? 'PDF ini tidak memiliki teks yang dapat dibaca (kemungkinan hasil scan). OCR tidak digunakan; isi detail PO dan baris item secara manual.'
-              : 'Teks PDF terbaca, tetapi baris item tidak cocok dengan format otomatis. Periksa file, lalu isi baris secara manual.'
+              ? 'This PDF has no readable text and may be scanned. Enter the purchase order details and items manually.'
+              : 'The PDF text is readable, but its items could not be detected. Review the file and enter the items manually.'
           );
         } else {
-          setPoImportMessage(`Berhasil membaca ${parsedItems.length} kandidat baris item. Periksa dan koreksi semua detail sebelum membuat invoice.`);
+          setPoImportMessage(`Found ${parsedItems.length} potential items. Review and correct all details before creating an invoice.`);
         }
       } catch (error) {
         console.error('Failed to extract PO details from PDF:', error);
         setPoItems([]);
         setSelectedPoIds([]);
-        setPoImportMessage(error.message || 'PDF gagal dibaca. Pastikan file tidak rusak, lalu isi PO secara manual.');
+        setPoImportMessage(error.message || 'Could not read the PDF. Check that the file is valid, then enter the purchase order manually.');
       } finally {
         setIsImportingPo(false);
       }
@@ -326,21 +328,21 @@ export default function ClientPoTab() {
           if (parsedItems.length > 0) {
             setPoItems(parsedItems);
             setSelectedPoIds(parsedItems.map((item) => item.id));
-            setPoImportMessage(`Berhasil membaca ${parsedItems.length} baris item. Periksa detail sebelum membuat invoice.`);
+            setPoImportMessage(`Read ${parsedItems.length} items. Review the details before creating an invoice.`);
           } else {
-            setPoImportMessage('Tidak ada baris item yang terbaca dari sheet pertama. Isi baris PO secara manual.');
+            setPoImportMessage('No items could be read from the first sheet. Enter the purchase order items manually.');
           }
         } catch (err) {
           console.error('Failed to parse PO Excel file:', err);
-          setPoImportMessage('File Excel/CSV gagal dibaca. Periksa format file, lalu isi PO secara manual.');
+          setPoImportMessage('Could not read the Excel/CSV file. Check the format, then enter the purchase order manually.');
         }
       };
-      reader.onerror = () => setPoImportMessage('File Excel/CSV tidak dapat dibaca oleh browser.');
+      reader.onerror = () => setPoImportMessage('The browser could not read the Excel/CSV file.');
       reader.readAsArrayBuffer(file);
       return;
     }
 
-    setPoImportMessage('Format file tidak didukung. Unggah PO PDF, Excel, atau CSV.');
+    setPoImportMessage('Unsupported file format. Upload a purchase order as PDF, Excel, or CSV.');
   };
 
   const handleAddPoItem = () => {
@@ -389,7 +391,7 @@ export default function ClientPoTab() {
       return;
     }
 
-    const stagedPayload = selectedRows.map((r) => {
+    let stagedPayload = selectedRows.map((r) => {
       const q = Number(r.qty) || 1;
       const p = Number(r.unit_price) || 0;
       const totalPrice = Math.round(q * p);
@@ -463,6 +465,15 @@ export default function ClientPoTab() {
       }
     }
 
+    try {
+      stagedPayload = await saveInvoiceStagingRows(stagedPayload);
+      const claims = await claimInvoiceStagingRows(stagedPayload.map((row) => row.id));
+      if (claims.length !== stagedPayload.length) throw new Error('Some PO drafts are already claimed.');
+    } catch (error) {
+      setPoImportMessage(error.message || 'PO drafts could not be saved and claimed.');
+      return;
+    }
+
     sessionStorage.setItem('wellen_import_source', 'po');
     sessionStorage.setItem('wellen_staged_items', JSON.stringify(stagedPayload));
     sessionStorage.setItem('wellen_po_include_jasa', JSON.stringify(poIncludeJasaCetak));
@@ -508,10 +519,10 @@ export default function ClientPoTab() {
           </div>
           <div className="text-left">
             <p className="text-xs font-bold text-stone-800 leading-tight">
-              {isImportingPo ? 'Membaca isi file PO...' : poFileName ? `File PO: ${poFileName}` : 'Unggah Purchase Order (.pdf, .xlsx, .xls, .csv)'}
+              {isImportingPo ? 'Reading purchase order...' : poFileName ? `Purchase order: ${poFileName}` : 'Upload Purchase Order (.pdf, .xlsx, .xls, .csv)'}
             </p>
             <p className="text-[10px] text-stone-400 mt-0.5 font-normal">
-              {poFileName ? 'Data hasil ekstraksi perlu diperiksa dan dikoreksi sebelum membuat invoice.' : 'PDF digital dibaca di browser; PDF scan perlu diisi manual. File tidak diunggah ke layanan pihak ketiga.'}
+              {poFileName ? 'Review and correct the extracted data before creating an invoice.' : 'Text-based PDFs are read in your browser. Enter scanned PDFs manually. Files are not uploaded to third-party services.'}
             </p>
           </div>
         </label>
@@ -602,7 +613,7 @@ export default function ClientPoTab() {
           </div>
           <fieldset className="min-w-0">
             <legend className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              PO PRICE INCLUDES PPN?
+              DO PO PRICES INCLUDE VAT?
             </legend>
             <div className="flex h-[38px] items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3">
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11px] font-medium text-stone-700">
@@ -613,7 +624,7 @@ export default function ClientPoTab() {
                   onChange={() => setPoPricesIncludePpn(true)}
                   className="h-3.5 w-3.5 accent-amber-600"
                 />
-                Include PPN
+                Include VAT
               </label>
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11px] font-medium text-stone-700">
                 <input
@@ -623,7 +634,7 @@ export default function ClientPoTab() {
                   onChange={() => setPoPricesIncludePpn(false)}
                   className="h-3.5 w-3.5 accent-amber-600"
                 />
-                Exclude PPN
+                Exclude VAT
               </label>
             </div>
             <p className="mt-1 text-[10px] leading-4 text-stone-500">
@@ -719,10 +730,10 @@ export default function ClientPoTab() {
                       </td>
 
                       <td className="py-2.5 px-3 text-center">
-                        <select
+                        <SearchableSelect
                           value={item.uom || 'M2'}
                           onChange={(e) => handleUpdatePoItem(item.id, 'uom', e.target.value)}
-                          className="w-full px-2 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-center text-stone-800 uppercase outline-none focus:border-amber-500 cursor-pointer"
+                          className="w-full"
                         >
                           <option value="M2">M²</option>
                           <option value="EA">EA</option>
@@ -730,7 +741,7 @@ export default function ClientPoTab() {
                           <option value="SET">SET</option>
                           <option value="LS">LS</option>
                           <option value="PACK">PACK</option>
-                        </select>
+                        </SearchableSelect>
                       </td>
 
                       <td className="py-2.5 px-3 text-right">
@@ -800,7 +811,7 @@ export default function ClientPoTab() {
               disabled={selectedPoIds.length === 0}
               className={`inline-flex items-center gap-2 font-bold px-5 py-2.5 rounded-xl text-xs shadow-xs transition-colors shrink-0 ${
                 selectedPoIds.length > 0
-                  ? 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
                   : 'bg-stone-200 text-stone-400 cursor-not-allowed'
               }`}
             >

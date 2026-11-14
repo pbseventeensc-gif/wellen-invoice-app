@@ -1,5 +1,9 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 import { useState, useEffect, useMemo } from 'react';
 import {
   Clock,
@@ -132,13 +136,12 @@ export default function StatusApprovalPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Header Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Status Approval</h1>
-            <span className="bg-amber-100 text-amber-800 text-xs font-normal px-2.5 py-0.5 rounded-full border border-amber-300">
+            <PageHeading title="Status Approval" badge={<span className="bg-amber-100 text-amber-800 text-xs font-normal px-2.5 py-0.5 rounded-full border border-amber-300">
               {stats.total} Active Tracking Items
-            </span>
+            </span>} />
           </div>
           <p className="text-xs text-stone-500 mt-1 font-normal">
             Monitor invoices currently waiting for management approval and those rejected for revision.
@@ -221,7 +224,7 @@ export default function StatusApprovalPage() {
 
         <div className="flex items-center gap-3 w-full md:w-auto justify-end">
           <label htmlFor="rows-per-page" className="text-xs text-stone-500 font-normal">Rows per page:</label>
-          <select
+          <SearchableSelect
             id="rows-per-page"
             name="rowsPerPage"
             aria-label="Rows per page"
@@ -230,12 +233,12 @@ export default function StatusApprovalPage() {
               setPageSize(Number(e.target.value));
               setCurrentPage(1);
             }}
-            className="text-xs font-normal px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-800 focus:outline-none cursor-pointer"
+            className="min-w-[5rem]"
           >
             <option value={5}>5</option>
             <option value={10}>10</option>
             <option value={20}>20</option>
-          </select>
+          </SearchableSelect>
         </div>
       </div>
 

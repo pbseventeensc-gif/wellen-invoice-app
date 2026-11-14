@@ -1,5 +1,9 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 import { useState, useEffect, useMemo } from 'react';
 import { 
   CheckCircle2, 
@@ -194,7 +198,7 @@ export default function ApprovedInvoicesPage() {
       'Promo / Material': inv.promo_name || '-',
       Created: inv.ar_name || inv.created_by || 'FAHADA',
       'Approval Time': inv.time_approved || inv.time_created || '-',
-      'Payment Settlement Status': inv.payment_status === 'paid' ? `Lunas (${inv.payment_date || '-'})` : 'Belum Lunas (Unpaid)',
+      'Payment Settlement Status': inv.payment_status === 'paid' ? `Paid (${inv.payment_date || '-'})` : 'Unpaid',
       'Net Value': inv.total_harga_net || inv.totalBersih || 0,
       'VAT': inv.ppn_amount || 0,
       'Grand Total': inv.grand_total || inv.grandTotal || 0,
@@ -222,13 +226,12 @@ export default function ApprovedInvoicesPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {/* Header Halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-stone-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Approved Invoices</h1>
-            <span className="bg-emerald-100 text-emerald-800 text-xs font-normal px-2.5 py-0.5 rounded-full border border-emerald-300">
+            <PageHeading title="Approved Invoices" badge={<span className="bg-emerald-100 text-emerald-800 text-xs font-normal px-2.5 py-0.5 rounded-full border border-emerald-300">
               {filteredInvoices.length} Documents
-            </span>
+            </span>} />
           </div>
           {loadError && (
             <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -317,7 +320,7 @@ export default function ApprovedInvoicesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <Building2 size={14} className="text-stone-400" />
-            <select
+            <SearchableSelect
               id="approved-client-filter"
               name="clientFilter"
               aria-label="Filter client PT"
@@ -326,19 +329,19 @@ export default function ApprovedInvoicesPage() {
                 setSelectedClient(e.target.value);
                 setCurrentPage(1);
               }}
-              className="text-xs bg-transparent focus:outline-none font-normal text-stone-700 cursor-pointer"
+              className="min-w-[5rem]"
             >
               {clientList.map((client) => (
                 <option key={client} value={client}>
                   {client === 'ALL' ? 'All Clients / PT' : client}
                 </option>
               ))}
-            </select>
+            </SearchableSelect>
           </div>
 
           <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5">
             <User size={14} className="text-stone-400" />
-            <select
+            <SearchableSelect
               id="approved-creator-filter"
               name="creatorFilter"
               aria-label="Filter creator AR"
@@ -347,14 +350,14 @@ export default function ApprovedInvoicesPage() {
                 setSelectedCreator(e.target.value);
                 setCurrentPage(1);
               }}
-              className="text-xs bg-transparent focus:outline-none font-normal text-stone-700 cursor-pointer"
+              className="min-w-[5rem]"
             >
               {creatorList.map((creator) => (
                 <option key={creator} value={creator}>
                   {creator === 'ALL' ? 'All Creators' : creator}
                 </option>
               ))}
-            </select>
+            </SearchableSelect>
           </div>
         </div>
       </div>

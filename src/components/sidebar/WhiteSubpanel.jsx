@@ -9,15 +9,15 @@ import userAvatar from '@/assets/logo_userlogin.png';
 import { isRouteAllowed, normalizeRole } from '@/config/permissions';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import { markAllInvoiceStatusesSeen } from '@/utils/invoiceNotifications';
-import { clearAllInvoiceData, listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
+import { listInvoiceWorkflows } from '@/utils/invoiceWorkflow';
 import { 
   Database,
+  Users,
   FileCheck2,
   ClipboardCheck,
   BarChart3, 
   ArrowUpRight,
   LogOut,
-  Trash2,
   Clock
 } from 'lucide-react';
 
@@ -68,66 +68,6 @@ export default function WhiteSubpanel() {
       }
     } catch (e) {
       console.error('Error cleaning legacy mock data:', e);
-    }
-  };
-
-  const handleResetAllData = () => {
-    setFeedback({
-      variant: 'confirm',
-      title: 'Clear all sample & workflow data?',
-      description: 'This will permanently remove all invoice, approval queue, and POS staging records from both the online database and this browser.',
-      confirmLabel: 'Clear all data',
-    });
-  };
-
-  const confirmResetAllData = async () => {
-    setFeedback(null);
-    try {
-      try {
-        await clearAllInvoiceData();
-      } catch (dbError) {
-        console.warn('Online clear RPC failed or not deployed:', dbError);
-      }
-
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('wellen_') && !key.includes('auth')) {
-          localStorage.removeItem(key);
-        }
-      });
-      Object.keys(sessionStorage).forEach((key) => {
-        if (key.startsWith('wellen_')) {
-          sessionStorage.removeItem(key);
-        }
-      });
-
-      localStorage.removeItem('wellen_rejected_invoices');
-      localStorage.removeItem('wellen_invoices');
-      localStorage.removeItem('wellen_approval_queue');
-      localStorage.removeItem('wellen_wpp_staging');
-      localStorage.removeItem('wellen_imported_wpp');
-      localStorage.removeItem('wellen_new_status_count');
-      localStorage.removeItem('wellen_invoice_status_seen');
-      sessionStorage.removeItem('wellen_staged_items');
-      sessionStorage.removeItem('wellen_import_source');
-      sessionStorage.removeItem('wellen_po_prices_include_ppn');
-
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new Event('wellen-status-notifications'));
-      window.dispatchEvent(new Event('wellen-invoice-workflows'));
-      window.dispatchEvent(new Event('wellen-invoice-staging'));
-
-      setFeedback({
-        variant: 'success',
-        title: 'Sample data cleared',
-        description: 'All invoices, approval queues, and POS staging data have been completely cleared.',
-      });
-    } catch (error) {
-      console.error('Failed to clear sample data:', error);
-      setFeedback({
-        variant: 'error',
-        title: 'Sample data could not be cleared',
-        description: 'Failed to completely remove data. Please check your connection and try again.',
-      });
     }
   };
 
@@ -206,6 +146,7 @@ export default function WhiteSubpanel() {
   };
 
   const allInvoiceMenus = [
+    { label: 'Clients', href: '/clients', icon: Users },
     { label: 'Master POS / Draft', href: '/master-pos', icon: Database },
     { label: normalizeRole(profile.role) === 'ar created' ? 'Select Drafts' : 'Invoices', href: '/invoices', icon: FileCheck2 },
     { label: 'Waiting Approval', href: '/status-approval', icon: Clock },
@@ -224,7 +165,6 @@ export default function WhiteSubpanel() {
     isRouteAllowed(profile.role, item.href)
   );
 
-  const isApprovalUser = normalizeRole(profile.role) === 'approval' || normalizeRole(profile.role) === 'super admin';
 
   return (
     <div className="flex h-full w-56 shrink-0 select-none flex-col justify-between border-r border-slate-200 bg-white px-3 py-5">
@@ -309,21 +249,6 @@ export default function WhiteSubpanel() {
         )}
       </div>
 
-      {/* Reset Data Testing (Khusus Role Approval / Super Admin) */}
-      {isApprovalUser && (
-        <div className="px-1 pb-3">
-          <button
-            onClick={handleResetAllData}
-            type="button"
-            title="Clear all sample & workflow data"
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer"
-          >
-            <Trash2 size={13} />
-            <span>Clear Sample Data</span>
-          </button>
-        </div>
-      )}
-
       {/* Profil User + Tombol Logout */}
       <div className="border-t border-stone-100 pt-4 px-2">
         <div className="flex items-center justify-between">
@@ -363,7 +288,6 @@ export default function WhiteSubpanel() {
         title={feedback?.title}
         description={feedback?.description}
         confirmLabel={feedback?.confirmLabel}
-        onConfirm={confirmResetAllData}
         onClose={() => setFeedback(null)}
       />
     </div>

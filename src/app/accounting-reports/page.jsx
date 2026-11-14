@@ -1,12 +1,15 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 import { useState, useEffect, useMemo } from 'react';
 import { 
   ReceiptText, 
   FileCheck, 
   CheckCheck, 
   Building2, 
-  ChevronDown,
   Download,
   PieChart
 } from 'lucide-react';
@@ -163,29 +166,25 @@ export default function AccountingReportsPage() {
         </div>
       )}
       {/* Header Navigasi */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-stone-200/80 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 gap-3">
         <div>
-          <div className="text-[12px] text-stone-400 font-normal">
-            Accounting &rsaquo; <span className="text-stone-600">Financial Reports & Receivables</span>
-          </div>
-          <h1 className="text-2xl font-bold text-stone-900 tracking-tight mt-0.5">Financial Reports & Invoice Summary</h1>
+          <PageHeading title="Financial Reports & Invoice Summary" />
         </div>
 
         <div>
           <div className="relative inline-block">
-            <select
+            <SearchableSelect
               id="report-role-filter"
               name="reportRole"
               aria-label="View as role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="appearance-none bg-white border border-stone-300 text-stone-700 text-xs font-medium pl-3 pr-8 py-2 rounded-xl shadow-2xs focus:outline-none focus:border-[#578ef5] cursor-pointer"
+              className="min-w-[5rem]"
             >
               <option value="accounting">View as Accounting Team</option>
               <option value="finance-lead">View as Finance Lead</option>
               <option value="auditor">View as Auditor</option>
-            </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none" />
+            </SearchableSelect>
           </div>
         </div>
       </div>
@@ -259,7 +258,7 @@ export default function AccountingReportsPage() {
               <input
                 id="report-start-date"
                 name="startDate"
-                aria-label="Tanggal mulai"
+                aria-label="Start date"
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
@@ -270,7 +269,7 @@ export default function AccountingReportsPage() {
               <input
                 id="report-end-date"
                 name="endDate"
-                aria-label="Tanggal akhir"
+                aria-label="End date"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}

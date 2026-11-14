@@ -1,11 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import PageHeading from '@/components/ui/PageHeading';
+
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, Trash2 } from 'lucide-react';
 import { calculateFakturBreakdown, formatRupiah, parseExcelDate } from '@/utils/taxCalculator';
 import { supabase } from '@/lib/supabase';
 import { isRouteAllowed, normalizeRole } from '@/config/permissions';
+import Link from 'next/link';
+import ClientPicker from '@/components/clients/ClientPicker';
+import { listClients } from '@/utils/clientDirectory';
+import { matchClient, resolveClientAddress } from '@/utils/clientDirectoryData';
+import { displayName, getImportTimestamp } from '@/utils/invoiceDisplay';
 import { submitInvoiceWorkflow } from '@/utils/invoiceWorkflow';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 
@@ -82,6 +91,7 @@ export default function CreateInvoicePage() {
             isPo,
             poPricesIncludePpn,
             clientName: parsed[0]?.client_name || '',
+            clientAddress: parsed[0]?.client_address || '',
             promoName: parsed[0]?.promo_name || '',
             fakturNo,
             invoiceDate: initialDate,
@@ -105,6 +115,11 @@ export default function CreateInvoicePage() {
   const [createdByName, setCreatedByName] = useState('FAHADA');
   const [clientName, setClientName] = useState('');
   const [clientAddress, setClientAddress] = useState('');
+  const [clients, setClients] = useState([]);
+  const [clientLookupError, setClientLookupError] = useState('');
+  const [addressWasEdited, setAddressWasEdited] = useState(false);
+  const matchedClient = useMemo(() => matchClient(clients, clientName), [clients, clientName]);
+  const billingAddress = resolveClientAddress(matchedClient, clientAddress, clientAddress, addressWasEdited);
   const [promoName, setPromoName] = useState('');
   const [isDppActive, setIsDppActive] = useState(false);
 
@@ -133,12 +148,29 @@ export default function CreateInvoicePage() {
     setInitialData(data);
     setWppNumber(data.fakturNo || '');
     if (data.invoiceDate) setInvoiceDate(data.invoiceDate);
-    setClientName(data.clientName || '');
+    setClientName(displayName(data.clientName));
+    setClientAddress(data.clientAddress || '');
     setPromoName(data.promoName || '');
     setImportSource(data.isPo ? 'po' : 'excel');
     setIsPoExclVatActive(data.isPo && data.poPricesIncludePpn);
     setStores(data.stores || []);
     /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const records = await listClients();
+        if (active) { setClients(records); setClientLookupError(''); }
+      } catch {
+        if (active) setClientLookupError('Client address lookup is unavailable. You can enter the billing address manually.');
+      }
+    };
+    load();
+    window.addEventListener('wellen-clients', load);
+    window.addEventListener('focus', load);
+    return () => { active = false; window.removeEventListener('wellen-clients', load); window.removeEventListener('focus', load); };
   }, []);
 
   // Auto detect AR Staff Name from Supabase User Email
@@ -264,12 +296,17 @@ export default function CreateInvoicePage() {
     : (totalDppOverall + vatAmount);
 
   const handleSubmitApproval = async () => {
-    if (stores.length === 0) {
+    if (calculatedStoreRows.length === 0) {
       setFeedback({
         variant: 'error',
         title: 'No invoice items',
         description: 'Add at least one store item before submitting this invoice.',
       });
+      return;
+    }
+
+    if (!clientName.trim() || !billingAddress.trim()) {
+      setFeedback({ variant: 'error', title: 'Client details required', description: 'Choose a client and complete the billing address before submitting. You can update its saved address in Clients.' });
       return;
     }
 
@@ -297,8 +334,10 @@ export default function CreateInvoicePage() {
       id: `wpk-${uniqueId}`,
       invoice_number: cleanWpkNumber,
       invoice_date: invoiceDate,
-      client_name: clientName,
-      client_address: clientAddress,
+      imported_at: getImportTimestamp({}, calculatedStoreRows),
+      client_id: matchedClient?.id || null,
+      client_name: matchedClient?.name || clientName,
+      client_address: billingAddress,
       promo_name: promoName,
       created_by: createdByName,
       ar_name: createdByName,
@@ -307,21 +346,23 @@ export default function CreateInvoicePage() {
       is_po_excl_vat_active: isPoExclVatActive,
       po_prices_include_ppn: isPoExclVatActive,
       show_jasa_cetak_po: showJasaCetakPo,
-      total_faktur: totalPoNetOverall,
-      total_harga_net: totalPoNetOverall,
-      subtotal_net: totalPoNetOverall,
-      total_dpp: totalDppOverall,
+      total_faktur: grandTotal,
+      total_harga_net: displayTotal,
+      subtotal_net: displayTotal,
+      total_dpp: displayTotal,
       total_dpp_lainnya: totalDppNilaiLainOverall,
       total_jasa_cetak: importSource === 'po' ? totalJasaCetakPoOverall : totalJasaCetakOverall,
       total_pph23: importSource === 'po' ? 0 : totalPph23Overall,
       dpp_lain: totalDppNilaiLainOverall,
       ppn_amount: vatAmount,
       grand_total: grandTotal,
-      time_created: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      time_created: new Date().toISOString(),
       status: 'waiting_approval',
       importSource: importSource,
       items: calculatedStoreRows.map((it) => ({
         id: it.id,
+        imported_at: getImportTimestamp(it),
+        store_name: it.store_name || it.item_description,
         source_no_wpp: it.source_no_wpp || it.wpp_number || it.no_faktur || '',
         no_faktur: cleanWpkNumber || it.no_faktur,
         wpp_number: cleanWpkNumber || it.wpp_number,
@@ -370,18 +411,18 @@ export default function CreateInvoicePage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-24">
       {/* Header Halaman */}
-      <div className="flex items-center justify-between pb-2 border-b border-stone-200/80">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
             aria-label="Back to previous page"
             onClick={() => router.back()}
-            className="p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-stone-700 shadow-2xs"
+            className="shrink-0 p-2 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-stone-700 shadow-2xs"
           >
             <ArrowLeft size={16} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Invoice Creation Form</h1>
+            <PageHeading title="Invoice Creation Form" />
             <p className="text-xs text-stone-500 mt-0.5 font-normal">
               Review document details, store items, and breakdown figures before submitting for approval.
             </p>
@@ -392,7 +433,7 @@ export default function CreateInvoicePage() {
           type="button"
           onClick={handleSubmitApproval}
           disabled={stores.length === 0}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 sm:w-auto text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-2xs transition-colors cursor-pointer"
         >
           <Send size={14} />
           <span>Submit for Approval</span>
@@ -439,42 +480,42 @@ export default function CreateInvoicePage() {
                 className="w-full text-xs font-semibold px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-700 cursor-not-allowed select-none"
               />
             ) : (
-              <select
+              <SearchableSelect
                 id="created-by"
                 name="createdByName"
                 value={createdByName}
                 onChange={(e) => setCreatedByName(e.target.value)}
-                className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 cursor-pointer"
+                className="w-full"
               >
                 <option value="FAHADA">FAHADA (fahadahanifah@gmail.com)</option>
                 <option value="KEYJIA">KEYJIA (nuralkeyjia987@gmail.com)</option>
-              </select>
+              </SearchableSelect>
             )}
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-2xs space-y-4">
-          <p className="text-[10px] font-bold text-stone-600 uppercase tracking-wider">Bill to (Client)</p>
+          <p className="text-xs font-semibold text-stone-600 uppercase tracking-wider">Bill to (Client)</p>
           <div>
             <label htmlFor="client-name" className="text-[11px] font-semibold text-stone-600 block mb-1">Client Name (PT)</label>
-            <input
-              id="client-name"
-              name="clientName"
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
-            />
+            <ClientPicker clients={clients} value={clientName}
+              onSelect={(client) => { setClientName(displayName(client.name)); setClientAddress(client.address || ''); setAddressWasEdited(false); }}
+              onManual={(name) => { setClientName(name); setClientAddress(''); setAddressWasEdited(true); requestAnimationFrame(() => document.getElementById('client-name')?.focus()); }} />
+            <input id="client-name" name="clientName" aria-label="Client name (manual input)" placeholder="Or enter client name manually" maxLength={300} value={clientName}
+              onChange={(event) => { setClientName(event.target.value); setClientAddress(''); setAddressWasEdited(false); }}
+              className="mt-2 w-full rounded-xl border border-stone-200 px-3 py-2 text-xs text-stone-800 focus:outline-emerald-400" />
           </div>
+          {clientLookupError ? <p role="status" className="text-xs leading-5 text-slate-500">{clientLookupError}</p> : matchedClient && <p className="text-xs text-slate-500">{addressWasEdited ? 'Address edited for this invoice.' : matchedClient.address ? 'Billing address from Clients.' : 'This client needs a billing address.'}</p>}
+          <Link href="/clients" className="inline-block text-xs text-emerald-700 underline underline-offset-2">Open client directory</Link>
           <div>
             <label htmlFor="client-address" className="text-[11px] font-semibold text-stone-600 block mb-1">Address & Contact</label>
             <textarea
               id="client-address"
               name="clientAddress"
               rows={3}
-              value={clientAddress}
-              onChange={(e) => setClientAddress(e.target.value)}
-              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none uppercase"
+              value={billingAddress}
+              onChange={(e) => { setClientAddress(e.target.value); setAddressWasEdited(true); }}
+              className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-700 leading-relaxed resize-none"
             />
           </div>
         </div>
@@ -489,7 +530,7 @@ export default function CreateInvoicePage() {
               type="text"
               value={promoName}
               onChange={(e) => setPromoName(e.target.value)}
-              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900 uppercase"
+              className="w-full text-xs font-semibold px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-amber-500 text-stone-900"
             />
           </div>
 
@@ -526,7 +567,7 @@ export default function CreateInvoicePage() {
 
                 <div>
                   <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                    Harga PO sudah termasuk PPN? :
+                    Do purchase order prices include VAT?
                   </label>
                   <div className="flex items-center gap-4 text-xs font-semibold text-stone-800">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -537,7 +578,7 @@ export default function CreateInvoicePage() {
                         onChange={() => setIsPoExclVatActive(true)}
                         className="accent-amber-500 w-4 h-4"
                       />
-                      <span>Include PPN</span>
+                      <span>Include VAT</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -547,7 +588,7 @@ export default function CreateInvoicePage() {
                         onChange={() => setIsPoExclVatActive(false)}
                         className="accent-amber-500 w-4 h-4"
                       />
-                      <span>Exclude PPN</span>
+                      <span>Exclude VAT</span>
                     </label>
                   </div>
                 </div>
@@ -600,12 +641,12 @@ export default function CreateInvoicePage() {
                 <th className="py-3 px-3 font-semibold">ITEM DESCRIPTION</th>
                 <th className="py-3 px-3 text-right w-32 font-semibold">TOTAL PRICE</th>
                 <th className="py-3 px-3 text-right w-28 font-semibold">DPP</th>
-                <th className="py-3 px-3 text-right w-28 font-semibold">NILAI BARANG</th>
-                <th className="py-3 px-3 text-right w-28 font-semibold">JASA CETAK</th>
+                <th className="py-3 px-3 text-right w-28 font-semibold">GOODS VALUE</th>
+                <th className="py-3 px-3 text-right w-28 font-semibold">PRINTING SERVICE</th>
                 <th className="py-3 px-3 text-right w-24 font-semibold">WHT</th>
-                <th className="py-3 px-3 text-right w-32 font-semibold">DPP NILAI LAIN BARANG</th>
-                <th className="py-3 px-3 text-right w-32 font-semibold">DPP NILAI LAIN JASA CETAK</th>
-                <th className="py-3 px-3 text-right w-28 font-semibold">PPN</th>
+                <th className="py-3 px-3 text-right w-32 font-semibold">ALTERNATIVE TAX BASE — GOODS</th>
+                <th className="py-3 px-3 text-right w-32 font-semibold">ALTERNATIVE TAX BASE — PRINTING SERVICE</th>
+                <th className="py-3 px-3 text-right w-28 font-semibold">VAT</th>
                 <th className="py-3 px-3 text-center w-14 font-semibold">ACTION</th>
               </tr>
             </thead>
@@ -618,8 +659,8 @@ export default function CreateInvoicePage() {
                   <td className="py-3 px-3 text-center text-stone-400 font-mono">
                     {idx + 1}
                   </td>
-                  <td className="py-3 px-3 font-semibold text-stone-900 uppercase">
-                    {row.item_description || row.store_name}
+                  <td className="py-3 px-3 font-semibold text-stone-900">
+                    {displayName(row.item_description || row.store_name)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap text-stone-900">
                     {formatRupiah(row.effectiveTotalPrice)}
@@ -710,7 +751,7 @@ export default function CreateInvoicePage() {
 
           {isDppActive && (
             <div className="flex justify-between items-center text-stone-600 border-t border-stone-100 pt-2 font-normal">
-              <span>DPP NILAI LAIN:</span>
+              <span>ALTERNATIVE TAX BASE:</span>
               <span className="font-mono font-semibold text-stone-800">{formatRupiah(totalDppNilaiLainOverall)}</span>
             </div>
           )}

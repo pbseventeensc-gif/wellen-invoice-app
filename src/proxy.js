@@ -21,7 +21,7 @@ export async function proxy(request) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Supabase URL atau Anon Key belum disetel di environment.');
+    throw new Error('Supabase URL or anonymous key is missing from the environment.');
   }
 
   let response = NextResponse.next({ request });

@@ -1,8 +1,11 @@
 'use client';
 
+import PageHeading from '@/components/ui/PageHeading';
+
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileSpreadsheet, Search, Trash2, Upload } from 'lucide-react';
+import { Search, Trash2, Upload } from 'lucide-react';
+import { displayName } from '@/utils/invoiceDisplay';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import TablePagination from '@/components/ui/TablePagination';
 import {
@@ -163,8 +166,7 @@ export default function MasterPosPage() {
       <div className="flex flex-col justify-between gap-4 border-b border-stone-200 pb-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <FileSpreadsheet size={22} className="text-amber-600" />
-            <h1 className="text-2xl font-bold tracking-tight text-stone-900">Master POS / Draft</h1>
+            <PageHeading title="Master POS / Draft" />
           </div>
           <p className="mt-1 text-xs text-stone-500">
             Imported POS data and tax breakdowns. Continue to Invoices to select Draft rows and create invoices.
@@ -214,12 +216,12 @@ export default function MasterPosPage() {
                 <th className="w-56 px-3 py-3">Store Name (Item Description)</th>
                 <th className="w-40 px-3 py-3 text-right">Grand Total</th>
                 <th className="px-3 py-3 text-right">DPP</th>
-                <th className="px-3 py-3 text-right">Nilai Barang</th>
-                <th className="px-3 py-3 text-right">Jasa Cetak</th>
+                <th className="px-3 py-3 text-right">Goods Value</th>
+                <th className="px-3 py-3 text-right">Printing Service</th>
                 <th className="px-3 py-3 text-right">WHT</th>
-                <th className="px-3 py-3 text-right">DPP Nilai Lain Barang</th>
-                <th className="px-3 py-3 text-right">DPP Nilai Lain Jasa Cetak</th>
-                <th className="px-3 py-3 text-right">PPN</th>
+                <th className="px-3 py-3 text-right">Alternative Tax Base — Goods</th>
+                <th className="px-3 py-3 text-right">Alternative Tax Base — Printing Service</th>
+                <th className="px-3 py-3 text-right">VAT</th>
                 <th className="w-20 px-3 py-3 text-center">Action</th>
               </tr>
             </thead>
@@ -248,7 +250,7 @@ export default function MasterPosPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-4 font-medium text-stone-800">{row.store_name || row.item_description || '-'}</td>
+                      <td className="px-3 py-4 font-medium text-stone-800">{displayName(row.store_name || row.item_description) || '-'}</td>
                       <td className="px-3 py-3 text-right">
                         <input
                           type="number"

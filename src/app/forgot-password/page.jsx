@@ -51,9 +51,9 @@ export default function ForgotPasswordPage() {
               />
             </div>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-stone-100">Pemulihan Kata Sandi</h1>
+          <h1 className="text-xl font-bold tracking-tight text-stone-100">Password Recovery</h1>
           <p className="mt-1 text-xs text-stone-400">
-            Masukkan email terdaftar untuk menerima tautan ubah kata sandi
+            Enter your registered email to receive a password reset link.
           </p>
         </div>
 
@@ -70,9 +70,9 @@ export default function ForgotPasswordPage() {
           <div className="space-y-4 text-center">
             <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-700">
               <CheckCircle2 size={28} />
-              <p className="text-xs font-semibold">Tautan Terkirim!</p>
+              <p className="text-xs font-semibold">Reset Link Sent!</p>
               <p className="text-[11px] text-stone-300">
-                Silakan periksa kotak masuk atau spam email <b>{email}</b> untuk melanjutkan pergantian kata sandi.
+                Check the inbox or spam folder for <b>{email}</b> to reset your password.
               </p>
             </div>
             <Link
@@ -80,13 +80,13 @@ export default function ForgotPasswordPage() {
               className="inline-flex items-center gap-2 text-xs text-stone-400 hover:text-orange-400 transition"
             >
               <ArrowLeft size={14} />
-              Kembali ke Login
+              Back to Sign In
             </Link>
           </div>
         ) : (
           <form onSubmit={handleResetRequest} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-300">Email Perusahaan</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-300">Work Email</label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500">
                   <Mail size={16} />
@@ -96,7 +96,7 @@ export default function ForgotPasswordPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nama@wellen.com"
+                  placeholder="name@wellen.com"
                   className="w-full rounded-xl border border-stone-800 bg-stone-950/60 py-2.5 pl-10 pr-3 text-xs text-stone-100 placeholder-stone-600 outline-none transition focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
@@ -110,10 +110,10 @@ export default function ForgotPasswordPage() {
               {loading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Mengirim tautan...</span>
+                  <span>Sending link...</span>
                 </>
               ) : (
-                'Kirim Tautan Reset'
+                'Send Reset Link'
               )}
             </button>
 
@@ -123,7 +123,7 @@ export default function ForgotPasswordPage() {
                 className="inline-flex items-center gap-1.5 text-[11px] text-stone-400 hover:text-orange-400 transition"
               >
                 <ArrowLeft size={13} />
-                Kembali ke Halaman Login
+                Back to Sign In
               </Link>
             </div>
           </form>

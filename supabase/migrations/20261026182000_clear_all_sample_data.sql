@@ -14,8 +14,8 @@ begin
     raise exception 'Not authorized to clear invoice data' using errcode = '42501';
   end if;
 
-  delete from public.invoice_workflows;
-  delete from public.invoice_staging;
+  delete from public.invoice_workflows where true;
+  delete from public.invoice_staging where true;
 end;
 $$;
 

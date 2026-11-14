@@ -1,8 +1,8 @@
 create table if not exists public.invoice_staging (
   source_key text primary key,
-  owner_id uuid not null references auth.users (id) on delete restrict,
-  status text not null check (status in ('draft', 'ready', 'ready_to_process', 'invoiced', 'approved', 'rejected')),
-  payload jsonb not null check (jsonb_typeof(payload) = 'object'),
+  owner_id uuid not null default auth.uid() references auth.users (id) on delete restrict,
+  status text not null default 'draft' check (status in ('draft', 'ready', 'ready_to_process', 'invoiced', 'approved', 'rejected')),
+  payload jsonb not null default '{}'::jsonb check (jsonb_typeof(payload) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

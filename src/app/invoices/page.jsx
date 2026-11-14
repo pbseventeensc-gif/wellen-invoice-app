@@ -1,16 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import PageHeading from '@/components/ui/PageHeading';
+
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowUpDown,
-  BadgeCheck,
   Check,
-  ChevronDown,
-  Clock3,
   Download,
   FilePlus2,
-  Layers3,
   Lock,
   Pencil,
   Printer,
@@ -21,6 +19,8 @@ import {
   X,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { displayName, formatImportTimestamp, jakartaDateKey } from '@/utils/invoiceDisplay';
+import { getAllRows } from '@/utils/invoiceRows';
 import { supabase } from '@/lib/supabase';
 import { normalizeRole } from '@/config/permissions';
 import {
@@ -37,6 +37,8 @@ import {
 import { calculateFakturBreakdown, formatRupiah, parseCurrencyNumber } from '@/utils/taxCalculator';
 import FeedbackDialog from '@/components/ui/FeedbackDialog';
 import PrintModal from '@/components/invoice-print/PrintModal';
+import ClearInvoiceDataButton from '@/components/invoice-list/ClearInvoiceDataButton';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 import TablePagination from '@/components/ui/TablePagination';
 import {
   getUnreadStatusCounts,
@@ -44,183 +46,30 @@ import {
   saveUnreadStatusCounts,
 } from '@/utils/invoiceNotifications';
 
-function getMonthYear(row) {
-  if (row.month_year) return String(row.month_year).slice(0, 7);
-  const date = row.import_date || row.invoice_date || row.time_created || row.time_approved;
-  return date ? String(date).slice(0, 7) : '';
-}
-
-function toInvoiceRow(row, status, id, invoiceNo) {
-  const transactionLines = Array.from(new Map((row.items || [])
-    .map((item) => ({
-      no_wpp: item.source_no_wpp || item.wpp_number || item.no_faktur || '',
-      store_name: String(item.store_name || item.item_description || '').trim(),
-    }))
-    .filter((item) => item.no_wpp || item.store_name)
-    .map((item, index) => [`${item.no_wpp}-${item.store_name}`, { ...item, id: `${item.no_wpp}-${item.store_name}-${index}` }])
-  ).values());
-  const sourceWppNumbers = Array.from(new Set(transactionLines.map((item) => item.no_wpp).filter(Boolean)));
-  const storeNames = Array.from(new Set(transactionLines.map((item) => item.store_name).filter(Boolean)));
-  const noWpp = row.no_wpp || sourceWppNumbers.join(', ') || row.wpp_number || row.no_faktur || row.invoice_number || '';
-  const noWppLines = String(noWpp).split(/\s*,\s*/).filter(Boolean);
-  const storeNameLines = storeNames.length ? storeNames : String(row.store_name || '').split(/\s*,\s*/).filter(Boolean);
-  const alignedLines = noWppLines.map((number, index) => ({
-    no_wpp: number,
-    store_name: transactionLines[index]?.store_name || storeNameLines[index] || '',
-  }));
-  return {
-    ...row,
-    id,
-    invoice_no: invoiceNo || row.invoice_no || row.invoice_number || '',
-    status,
-    claimed_by_id: row.claimed_by_id || null,
-    claimed_by_name: row.claimed_by_name || null,
-    claimed_at: row.claimed_at || null,
-    no_wpp: noWpp,
-    transaction_lines: alignedLines,
-    client_name: row.client_name || row.customer || '-',
-    store_name: storeNameLines.join(', ') || '-',
-    created_by: row.created_by || row.ar_name || '',
-    approved_by: row.approved_by || row.approver_name || '',
-    import_date: row.import_date || row.invoice_date || row.time_created || '',
-    month_year: getMonthYear(row),
-    created_invoice_at: row.created_invoice_at || row.time_created || '',
-    approved_at: row.approved_at || row.time_approved || '',
-    grand_total: Number(row.grand_total ?? row.total_price ?? row.total_faktur ?? row.nilai_wpp ?? 0),
-  };
-}
-
-function getAllRows(workflows, staging) {
-  const rows = [];
-  const activeItemIds = new Set();
-  const activeSourceNumbers = new Set();
-
-  workflows.filter((invoice) => invoice.status === 'waiting_approval').forEach((invoice) => {
-    (invoice.items || []).forEach((item) => {
-      if (item.id) activeItemIds.add(item.id);
-      [item.source_no_wpp, item.wpp_number, item.no_faktur].forEach((number) => {
-        const normalizedNumber = String(number || '').trim().toLowerCase();
-        if (normalizedNumber) activeSourceNumbers.add(normalizedNumber);
-      });
-    });
-    rows.push(toInvoiceRow(invoice, 'Invoiced', invoice.id, invoice.invoice_number));
-  });
-  workflows.filter((invoice) => invoice.status === 'approved').forEach((invoice) => {
-    (invoice.items || []).forEach((item) => {
-      if (item.id) activeItemIds.add(item.id);
-      [item.source_no_wpp, item.wpp_number, item.no_faktur].forEach((number) => {
-        const normalizedNumber = String(number || '').trim().toLowerCase();
-        if (normalizedNumber) activeSourceNumbers.add(normalizedNumber);
-      });
-    });
-    rows.push(toInvoiceRow(invoice, 'Approved', invoice.id, invoice.invoice_number));
-  });
-
-  staging.forEach((item) => {
-    if (!['draft', 'ready', 'ready_to_process', 'rejected'].includes(String(item.status || '').toLowerCase())) return;
-    const sourceNumbers = [item.source_no_wpp, item.wpp_number, item.no_faktur]
-      .map((number) => String(number || '').trim().toLowerCase())
-      .filter(Boolean);
-    if (activeItemIds.has(item.id) || sourceNumbers.some((number) => activeSourceNumbers.has(number))) return;
-    const sourceStatus = String(item.status || '').toLowerCase();
-    const status = sourceStatus === 'rejected'
-      ? 'Rejected'
-      : 'Draft';
-    rows.push(toInvoiceRow(item, status, item.id, item.invoice_no || item.invoice_number));
-  });
-
-  return Array.from(new Map(rows.map((row) => [row.id || `${row.invoice_no}-${row.no_wpp}`, row])).values())
-    .sort((a, b) => String(b.import_date).localeCompare(String(a.import_date)));
-}
-
 function displayDate(value, includeTime = false) {
+  if (includeTime) return formatImportTimestamp(value);
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat('id-ID', includeTime
+  return new Intl.DateTimeFormat('en-GB', includeTime
     ? { dateStyle: 'medium', timeStyle: 'short' }
     : { dateStyle: 'medium' }
   ).format(date);
 }
 
-function getCurrentMonthDateRange() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
-  return {
-    from: `${year}-${month}-01`,
-    to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
-  };
+function InvoiceFilterDropdown({ label, value, options, onChange, widthClass = 'min-w-[150px]' }) {
+  return <div className={`flex min-w-0 flex-col gap-1 text-[11px] font-medium text-slate-500 ${widthClass}`}>
+    <span>{label}</span>
+    <SearchableSelect aria-label={label} value={value} options={options} onValueChange={onChange} className="w-full" searchPlaceholder={`Search ${label.toLowerCase()}…`} />
+  </div>;
 }
 
-function InvoiceFilterDropdown({ label, value, options, onChange, widthClass = 'min-w-[150px]' }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const selectedOption = options.find((option) => option.value === value) || options[0];
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
-    };
-    const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setIsOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsideClick);
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsideClick);
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
-  return (
-    <div ref={dropdownRef} className="relative flex flex-col gap-1 text-[11px] font-medium text-slate-500">
-      <span>{label}</span>
-      <button
-        type="button"
-        aria-label={label}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
-        className={`inline-flex h-9 ${widthClass} items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-2.5 text-left text-xs font-normal text-slate-700 transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-100`}
-      >
-        <span className="truncate">{selectedOption?.label}</span>
-        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && (
-        <div
-          role="listbox"
-          aria-label={label}
-          className="absolute left-0 top-full z-30 mt-2 w-max min-w-full max-w-[min(22rem,90vw)] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
-        >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
-                  isSelected
-                    ? 'bg-amber-50 font-semibold text-amber-800'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <span className="flex-1 whitespace-nowrap">{option.label}</span>
-                {isSelected && <Check size={16} className="shrink-0 text-amber-600" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function ImportDate({ value }) {
+  const [date, time] = formatImportTimestamp(value).split(' ');
+  return <span className="flex flex-col gap-0.5 leading-5">
+    <span>{date}</span>
+    {time && <span className="text-xs text-slate-400">{time} WIB</span>}
+  </span>;
 }
 
 export default function InvoiceListPage() {
@@ -234,8 +83,8 @@ export default function InvoiceListPage() {
   const [clientFilter, setClientFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 8;
-  const initialDateRange = getCurrentMonthDateRange();
+  const pageSize = 25;
+  const initialDateRange = { from: '', to: '' };
   const [fromDate, setFromDate] = useState(initialDateRange.from);
   const [toDate, setToDate] = useState(initialDateRange.to);
   const [sortBy, setSortBy] = useState('import_date');
@@ -338,7 +187,7 @@ export default function InvoiceListPage() {
         const matchesSearch = !query || [row.invoice_no, row.no_wpp, row.client_name, row.store_name, row.claimed_by_name]
           .some((value) => String(value || '').toLowerCase().includes(query));
         const matchesClient = clientFilter === 'ALL' || row.client_name === clientFilter;
-        const date = String(row.import_date || '').slice(0, 10);
+        const date = jakartaDateKey(row.import_date);
         const matchesFrom = !fromDate || date >= fromDate;
         const matchesTo = !toDate || date <= toDate;
         return matchesSearch && matchesClient && matchesFrom && matchesTo;
@@ -560,8 +409,8 @@ export default function InvoiceListPage() {
   });
   const selectableDraftIds = selectableDrafts.map((r) => r.id);
 
-  const allActionableSelected = (visiblePrintableRows.length === 0 || visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id)))
-    && (selectableDrafts.length > 0 && selectableDrafts.every((row) => selectedDraftIds.includes(row.id)))
+  const allActionableSelected = visiblePrintableRows.every((row) => selectedPrintIds.includes(row.id))
+    && selectableDrafts.every((row) => selectedDraftIds.includes(row.id))
     && (visiblePrintableRows.length + selectableDrafts.length > 0);
 
   const handleApprove = (invoice) => {
@@ -603,15 +452,15 @@ export default function InvoiceListPage() {
 
   const exportToExcel = () => {
     const data = filteredRows.map((row) => ({
+      'Import Date': row.import_date,
       'No Invoice': row.invoice_no || '-',
       Status: row.status,
       'No WPP': row.no_wpp,
-      'Klien / Customer': row.client_name,
+      'Customer': row.client_name,
       'Store Name': row.store_name,
       'Created By': row.created_by || '-',
       'Approved By': row.approved_by || '-',
-      'Tanggal Import': row.import_date,
-      'Bulan & Tahun': row.month_year,
+      'Month / Year': row.month_year,
       'Timestamp Queue AR': row.created_invoice_at,
       'Timestamp Approved': row.approved_at,
       'Grand Total': row.grand_total,
@@ -647,10 +496,10 @@ export default function InvoiceListPage() {
   const approvedAmount = matchingRows.filter((row) => row.status === 'Approved').reduce((sum, row) => sum + (Number(row.grand_total) || 0), 0);
 
   const invoiceCards = [
-    { value: 'ALL', label: 'All records', icon: Layers3, color: 'text-slate-700', iconStyle: 'bg-slate-100 text-slate-600', count: matchingRows.length, amount: allAmount },
-    { value: 'Draft', label: 'Draft', icon: Clock3, color: 'text-orange-800', iconStyle: 'bg-orange-50 text-orange-700', count: matchingRows.filter((row) => row.status === 'Draft').length, amount: draftAmount },
-    { value: 'Invoiced', label: 'Waiting Approval', icon: FilePlus2, color: 'text-amber-800', iconStyle: 'bg-amber-100 text-amber-700', count: matchingRows.filter((row) => row.status === 'Invoiced').length, amount: invoicedAmount },
-    { value: 'Approved', label: 'Approved', icon: BadgeCheck, color: 'text-emerald-700', iconStyle: 'bg-emerald-50 text-emerald-600', count: matchingRows.filter((row) => row.status === 'Approved').length, amount: approvedAmount },
+    { value: 'ALL', label: 'All records', count: matchingRows.length, amount: allAmount },
+    { value: 'Draft', label: 'Draft', count: matchingRows.filter((row) => row.status === 'Draft').length, amount: draftAmount },
+    { value: 'Invoiced', label: 'Waiting Approval', count: matchingRows.filter((row) => row.status === 'Invoiced').length, amount: invoicedAmount },
+    { value: 'Approved', label: 'Approved', count: matchingRows.filter((row) => row.status === 'Approved').length, amount: approvedAmount },
   ];
   const visibleInvoiceCards = role === 'ar created'
     ? invoiceCards.filter((card) => ['Draft', 'Invoiced'].includes(card.value))
@@ -671,6 +520,7 @@ export default function InvoiceListPage() {
       : 'All dates';
   const selectStatus = (status) => {
     setStatusFilter(status);
+    setClaimFilter('ALL');
     setCurrentPage(1);
     if (status !== 'ALL') markStatusSeen(status);
   };
@@ -686,13 +536,10 @@ export default function InvoiceListPage() {
     setCurrentPage(1);
   };
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5 pb-20">
+    <div className="invoice-workspace mx-auto max-w-[1500px] space-y-3 pb-6">
       <header className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-medium text-slate-400">Sales <span className="px-1">›</span> Finance</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-            {role === 'ar created' ? 'POS Drafts & Waiting Approval' : 'Invoices'}
-          </h1>
+          <PageHeading title={role === 'ar created' ? 'POS Drafts & Waiting Approval' : 'Invoices'} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedDraftRows.length > 0 && (
@@ -701,7 +548,7 @@ export default function InvoiceListPage() {
                 <button
                   type="button"
                   onClick={() => handleClaimDrafts(selectedDraftRows.filter((r) => !r.claimed_by_id).map((r) => r.id))}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 shadow-sm transition hover:bg-amber-100"
                 >
                   <Lock size={13} />
                   Claim Draft ({selectedDraftRows.filter((r) => !r.claimed_by_id).length})
@@ -711,7 +558,7 @@ export default function InvoiceListPage() {
                 <button
                   type="button"
                   onClick={() => handleReleaseDrafts(selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).map((r) => r.id))}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
                 >
                   <Unlock size={13} />
                   Release Claim ({selectedDraftRows.filter((r) => r.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role)).length})
@@ -720,7 +567,7 @@ export default function InvoiceListPage() {
               <button
                 type="button"
                 onClick={handleCreateInvoiceFromDrafts}
-                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-600"
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-700"
               >
                 <FilePlus2 size={14} />
                 Create Invoice ({selectedDraftRows.length})
@@ -732,25 +579,23 @@ export default function InvoiceListPage() {
 
       <section className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {visibleInvoiceCards.map((card) => {
-          const Icon = card.icon;
           const isActive = statusFilter === card.value;
           return (
             <button
               key={card.value}
               type="button"
               aria-pressed={isActive}
+              aria-controls="invoice-records-table"
+              aria-label={`Show ${card.label.toLowerCase()}: ${card.count} records`}
               onClick={() => selectStatus(card.value)}
-              className={`rounded-xl border bg-white p-3 text-left shadow-[0_2px_6px_rgba(15,23,42,0.04)] transition ${
-                isActive ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200/80 hover:border-slate-300'
+              className={`cursor-pointer rounded-xl border p-3 text-left shadow-[0_2px_6px_rgba(15,23,42,0.04)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-2 ${
+                isActive ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-slate-200/80 bg-white hover:border-orange-300 hover:bg-orange-50/40'
               }`}
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-slate-500">{card.label}</span>
-                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${card.iconStyle}`}>
-                  <Icon size={16} />
-                </span>
               </span>
-              <span className={`mt-1.5 block text-2xl font-semibold tracking-tight ${card.color}`}>{card.count}</span>
+              <span className={`mt-1.5 block text-xl font-normal tracking-tight text-slate-700`}>{card.count}</span>
               <span className="mt-1 block text-xs font-mono font-medium text-slate-500 truncate" title={formatRupiah(card.amount)}>
                 {formatRupiah(card.amount)}
               </span>
@@ -760,12 +605,12 @@ export default function InvoiceListPage() {
       </section>
 
       <section className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-[0_2px_8px_rgba(15,23,42,0.04)]">
-        <div className="border-b border-slate-200 px-4 py-3.5 sm:px-5">
+        <div className="border-b border-slate-200 px-4 py-2.5 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">Invoices</p>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {periodLabel}<span className="px-1.5">·</span>{filteredRows.length} invoices
+              <p className="text-sm font-medium text-slate-900">{statusFilter === 'ALL' ? 'Invoices · All records' : `Invoices · ${invoiceCards.find((card) => card.value === statusFilter)?.label || statusFilter}`}</p>
+              <p aria-live="polite" className="mt-0.5 text-xs text-slate-500">
+                {periodLabel}<span className="px-1.5">·</span>{filteredRows.length} records · {filteredRows.reduce((count, row) => count + Math.max(1, row.transaction_lines.length), 0)} WPP rows
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -875,6 +720,14 @@ export default function InvoiceListPage() {
               <RotateCcw size={13} className="text-slate-500" />
               <span>Reset Filter</span>
             </button>
+            {canApprove && (
+              <ClearInvoiceDataButton onCleared={() => {
+                setSelectedDraftIds([]);
+                setSelectedPrintIds([]);
+                setSelectedInvoice(null);
+                setCurrentPage(1);
+              }} />
+            )}
           </div>
 
           {(statusFilter === 'Draft' || role === 'ar created') && (
@@ -931,10 +784,10 @@ export default function InvoiceListPage() {
         </div>
 
         <div className="data-table-scroll">
-          <table className="data-table w-full min-w-[1480px] border-collapse text-left text-sm">
+          <table id="invoice-records-table" className="data-table w-full min-w-[1480px] border-collapse text-left text-sm">
             <thead className="bg-slate-50 text-[13px] text-slate-600">
               <tr>
-                <th className="w-10 px-3 py-3.5 text-center font-medium">
+                <th className="w-10 px-3 py-2.5 text-center font-medium">
                   <input
                     type="checkbox"
                     aria-label="Select all Draft and printable invoices on this page"
@@ -951,15 +804,8 @@ export default function InvoiceListPage() {
                     className="h-4 w-4 rounded border-slate-300 accent-amber-500"
                   />
                 </th>
-                <th className="px-3 py-3.5 font-medium">Number</th>
-                <th className="px-3 py-3.5 font-medium">Status</th>
-                <th className="px-3 py-3.5 font-medium">No WPP</th>
-                <th className="px-3 py-3.5 font-medium">Customer</th>
-                <th className="px-3 py-3.5 font-medium">Store Name</th>
-                <th className="px-3 py-3.5 font-medium">Created By</th>
-                <th className="px-3 py-3.5 font-medium">Approved By</th>
                 <th
-                  className="cursor-pointer px-3 py-3.5 font-medium"
+                  className="cursor-pointer px-3 py-2.5 font-medium"
                   onClick={() => {
                     setSortBy('import_date');
                     setSortDirection((direction) => direction === 'desc' ? 'asc' : 'desc');
@@ -967,11 +813,19 @@ export default function InvoiceListPage() {
                 >
                   <span className="inline-flex items-center gap-1">Import Date <ArrowUpDown size={12} /></span>
                 </th>
-                <th className="px-3 py-3.5 font-medium">Month / Year</th>
-                <th className="px-3 py-3.5 font-medium">AR Queue Timestamp</th>
-                <th className="px-3 py-3.5 font-medium">Approved Timestamp</th>
-                <th className="px-3 py-3.5 text-right font-medium">Total</th>
-                <th className="px-3 py-3.5 text-right font-medium">Action</th>
+                <th className="px-3 py-2.5 font-medium">Number</th>
+                <th className="px-3 py-2.5 font-medium">Status</th>
+                <th className="px-3 py-2.5 font-medium">No WPP</th>
+                <th className="px-3 py-2.5 font-medium">Customer</th>
+                <th className="px-3 py-2.5 font-medium">Store Name</th>
+                <th className="px-3 py-2.5 font-medium">Created By</th>
+                <th className="px-3 py-2.5 font-medium">Approved By</th>
+
+                <th className="px-3 py-2.5 font-medium">Month / Year</th>
+                <th className="px-3 py-2.5 font-medium">AR Queue Timestamp</th>
+                <th className="px-3 py-2.5 font-medium">Approved Timestamp</th>
+                <th className="px-3 py-2.5 text-right font-medium">Total</th>
+                <th className="px-3 py-2.5 text-right font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -997,7 +851,7 @@ export default function InvoiceListPage() {
                     ['Invoiced', 'Approved'].includes(row.status) ? 'cursor-pointer focus:bg-amber-50 focus:outline-none' : ''
                   }`}
                 >
-                  <td className="px-3 py-3 text-center" onClick={(event) => event.stopPropagation()}>
+                  <td className="px-3 py-2 text-center" onClick={(event) => event.stopPropagation()}>
                     {row.status === 'Draft' && canSelectDraft ? (
                       <input
                         type="checkbox"
@@ -1036,9 +890,11 @@ export default function InvoiceListPage() {
                       />
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 font-mono font-medium text-slate-800">{row.invoice_no || '—'}</td>
-                  <td className="px-3 py-3">
-                    <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600"><ImportDate value={row.import_date} /></td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono font-medium text-slate-800">{row.invoice_no || '—'}</td>
+                  <td className="min-w-40 px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium ${
                       row.status === 'Approved'
                         ? 'bg-emerald-50 text-emerald-700'
                         : row.status === 'Invoiced'
@@ -1050,49 +906,49 @@ export default function InvoiceListPage() {
                       {row.status === 'Invoiced' ? 'Waiting Approval' : row.status}
                     </span>
                     {row.status === 'Draft' && (
-                      <div className="mt-1">
+                      <div className="flex min-w-0 items-center">
                         {row.claimed_by_id === currentUser?.id ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200" title="Draft claimed by you">
-                            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
-                              <Check size={10} strokeWidth={3} />
-                            </span>
+                          <span className="inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-emerald-50 px-1.5 text-[10px] font-medium text-emerald-700" title="Draft claimed by you">
+                            <Check size={11} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                             My Draft
                           </span>
                         ) : row.claimed_by_id ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600" title={`In progress by ${row.claimed_by_name || 'Other AR'}`}>
+                          <span className="inline-flex h-5 max-w-28 items-center gap-1 whitespace-nowrap rounded-md bg-slate-100 px-1.5 text-[10px] font-medium text-slate-600" title={`In progress by ${row.claimed_by_name || 'Other AR'}`}>
                             <Lock size={10} className="text-slate-400" />
-                            {row.claimed_by_name || 'Other AR'}
+                            <span className="truncate">{row.claimed_by_name || 'Other AR'}</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                          <span className="inline-flex h-5 items-center whitespace-nowrap rounded-md bg-slate-100 px-1.5 text-[10px] font-medium text-slate-500">
                             Available
                           </span>
                         )}
                       </div>
                     )}
+                    </div>
                   </td>
-                  <td className="w-44 min-w-44 px-3 py-3 font-mono text-slate-700">
+                  <td className="w-44 min-w-44 px-3 py-2 font-mono text-slate-700">
                     <span className="flex flex-col gap-y-0.5 leading-5">
                       {(row.transaction_lines.length ? row.transaction_lines : [{ no_wpp: '—' }]).map((line, index) => (
                         <span key={`${line.no_wpp}-${index}`} className="whitespace-nowrap">{line.no_wpp}</span>
                       ))}
                     </span>
                   </td>
-                  <td className="max-w-52 truncate px-3 py-3 text-slate-700">{row.client_name}</td>
-                  <td className="max-w-56 px-3 py-3 text-slate-700" title={row.store_name}>
+                  <td className="w-52 min-w-52 max-w-52 px-3 py-2 text-slate-700" title={row.client_name}>
+                    <span className="line-clamp-2 whitespace-normal break-words leading-5">{displayName(row.client_name)}</span>
+                  </td>
+                  <td className="w-56 min-w-56 max-w-56 px-3 py-2 text-slate-700" title={row.store_name}>
                     <span className="flex flex-col gap-y-0.5 leading-5">
                       {(row.transaction_lines.length ? row.transaction_lines : [{ store_name: row.store_name || '—' }]).map((line, index) => (
-                        <span key={`${line.no_wpp || 'store'}-${index}`} className="truncate">{line.store_name || '—'}</span>
+                        <span key={`${line.no_wpp || 'store'}-${index}`} className="line-clamp-2 whitespace-normal break-words" title={line.store_name}>{displayName(line.store_name) || '—'}</span>
                       ))}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.created_by || '—'}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.approved_by || '—'}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.import_date)}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{row.month_year || '—'}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.created_invoice_at, true)}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-600">{displayDate(row.approved_at, true)}</td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-medium text-slate-800">
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{displayName(row.created_by) || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{displayName(row.approved_by) || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{row.month_year || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{displayDate(row.created_invoice_at, true)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-slate-600">{displayDate(row.approved_at, true)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-mono font-medium text-slate-800">
                     {row.status === 'Draft' ? (
                       <label className="inline-flex items-center justify-end gap-1.5">
                         <Pencil size={12} className="text-slate-400" />
@@ -1118,7 +974,7 @@ export default function InvoiceListPage() {
                       </label>
                     ) : formatRupiah(row.grand_total)}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-2 text-right">
                     {canApprove && row.status === 'Invoiced' && (
                       <button
                         type="button"
@@ -1126,7 +982,7 @@ export default function InvoiceListPage() {
                           event.stopPropagation();
                           handleApprove(row);
                         }}
-                        className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                        className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-emerald-700"
                       >
                         Approve
                       </button>
@@ -1140,11 +996,11 @@ export default function InvoiceListPage() {
                               event.stopPropagation();
                               handleClaimDrafts([row.id]);
                             }}
-                            className="group inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-dashed border-emerald-500 bg-emerald-50 text-emerald-600 shadow-xs transition hover:bg-emerald-600 hover:text-white"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2"
                             title="Claim draft"
                             aria-label="Claim draft"
                           >
-                            <Check size={14} strokeWidth={2.5} />
+                            <Check size={16} strokeWidth={2} aria-hidden="true" />
                           </button>
                         ) : row.claimed_by_id === currentUser?.id || ['super admin', 'approval'].includes(role) ? (
                           <button
@@ -1153,15 +1009,15 @@ export default function InvoiceListPage() {
                               event.stopPropagation();
                               handleReleaseDrafts([row.id]);
                             }}
-                            className="group inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xs transition hover:bg-rose-600"
+                            className="group inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2"
                             title="Claimed - Click to release"
                             aria-label="Claimed - Click to release"
                           >
-                            <Check size={15} strokeWidth={3} className="transition group-hover:hidden" />
-                            <X size={15} strokeWidth={3} className="hidden transition group-hover:block" />
+                            <Check size={16} strokeWidth={2} className="group-hover:hidden group-focus-visible:hidden" aria-hidden="true" />
+                            <Unlock size={15} strokeWidth={1.75} className="hidden group-hover:block group-focus-visible:block" aria-hidden="true" />
                           </button>
                         ) : (
-                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-400" title={`Claimed by ${row.claimed_by_name || 'Other AR'}`}>
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400" title={`Claimed by ${row.claimed_by_name || 'Other AR'}`}>
                             <Lock size={13} />
                           </span>
                         )}
@@ -1198,12 +1054,12 @@ export default function InvoiceListPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="font-mono text-xs text-slate-400">{selectedInvoice.invoice_no || 'Invoice details'}</p>
-                  <h2 id="invoice-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-950">
+                  <h2 id="invoice-detail-title" className="mt-1 truncate text-xl font-medium tracking-tight text-slate-950">
                     {selectedInvoice.client_name}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
                     {String(selectedInvoice.no_wpp || '').split(/\s*,\s*/).filter(Boolean).length} POS transaction(s)
-                    <span className="px-1">·</span> Imported {displayDate(selectedInvoice.import_date)}
+                    <span className="px-1">·</span> Imported {formatImportTimestamp(selectedInvoice.import_date)}
                   </p>
                 </div>
                 <button
@@ -1216,7 +1072,7 @@ export default function InvoiceListPage() {
                 </button>
               </div>
               <div className="mt-4 flex items-center justify-between">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                   selectedInvoice.status === 'Approved'
                     ? 'bg-emerald-50 text-emerald-700'
                     : 'bg-amber-50 text-amber-700'
@@ -1231,14 +1087,14 @@ export default function InvoiceListPage() {
             </header>
             <div className="flex-1 space-y-4 overflow-y-auto p-6">
               <section className="rounded-xl border border-slate-200 p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Invoice total</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Invoice total</p>
+                <p className="mt-2 text-2xl font-medium tracking-tight text-slate-950">
                   {formatRupiah(selectedInvoice.grand_total)}
                 </p>
               </section>
               <section className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 p-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">No WPP</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">No WPP</p>
                   <div className="mt-1 flex flex-col gap-y-1 font-mono text-sm text-slate-800">
                     {(selectedInvoice.transaction_lines.length
                       ? selectedInvoice.transaction_lines
@@ -1249,41 +1105,41 @@ export default function InvoiceListPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Store Name</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Store Name</p>
                   <div className="mt-1 flex flex-col gap-y-1 text-sm text-slate-800">
                     {(selectedInvoice.transaction_lines.length
                       ? selectedInvoice.transaction_lines
                       : [{ store_name: selectedInvoice.store_name || '—' }]
                     ).map((line, index) => (
-                      <span key={`${line.store_name || 'store'}-${index}`} className="break-words">{line.store_name || '—'}</span>
+                      <span key={`${line.store_name || 'store'}-${index}`} className="break-words">{displayName(line.store_name) || '—'}</span>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Month / Year</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Month / Year</p>
                   <p className="mt-1 text-sm text-slate-800">{selectedInvoice.month_year || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">AR queue timestamp</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">AR queue timestamp</p>
                   <p className="mt-1 text-sm text-slate-800">{displayDate(selectedInvoice.created_invoice_at, true)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Approved timestamp</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Approved timestamp</p>
                   <p className="mt-1 text-sm text-slate-800">{displayDate(selectedInvoice.approved_at, true)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Created by</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Created by</p>
                   <p className="mt-1 text-sm text-slate-800">{selectedInvoice.created_by || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Approved by</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Approved by</p>
                   <p className="mt-1 text-sm text-slate-800">{selectedInvoice.approved_by || '—'}</p>
                 </div>
               </section>
               {selectedInvoice.items?.length > 0 && (
                 <section className="overflow-hidden rounded-xl border border-slate-200">
                   <div className="border-b border-slate-200 px-4 py-3">
-                    <h3 className="text-sm font-semibold text-slate-800">Invoice items</h3>
+                    <h3 className="text-sm font-medium text-slate-800">Invoice items</h3>
                   </div>
                   <div className="divide-y divide-slate-100">
                     {selectedInvoice.items.map((item, index) => (
@@ -1310,7 +1166,7 @@ export default function InvoiceListPage() {
                 <button
                   type="button"
                   onClick={() => handleApprove(selectedInvoice)}
-                  className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-600"
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-emerald-700"
                 >
                   Approve invoice
                 </button>

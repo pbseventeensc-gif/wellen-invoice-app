@@ -78,9 +78,9 @@ export default function DashboardLayoutWrapper({ children }) {
   const isAllowed = !loadingRole && userRole && isRouteAllowed(userRole, pathname);
 
   return (
-    <div className="flex min-h-screen antialiased flex-col md:flex-row bg-stone-100">
+    <div className="flex min-h-screen antialiased flex-col lg:flex-row bg-stone-100">
       {/* Mobile Top Header */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-stone-200 sticky top-0 z-30 shadow-2xs">
+      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-stone-200 sticky top-0 z-30 shadow-2xs">
         <div className="flex items-center gap-2.5">
           <Image
             src="/logo-wellen.png"
@@ -105,7 +105,7 @@ export default function DashboardLayoutWrapper({ children }) {
       {/* Mobile Backdrop Overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 bg-stone-900/40 z-40 md:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 bg-stone-900/40 z-40 lg:hidden backdrop-blur-xs transition-opacity"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -113,14 +113,14 @@ export default function DashboardLayoutWrapper({ children }) {
       {/* Sidebar Desktop & Mobile Slide-over Drawer */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 transform md:transform-none md:static md:flex h-screen shrink-0 transition-transform duration-200 ease-in-out shadow-2xl md:shadow-none
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          fixed inset-y-0 left-0 z-50 transform lg:transform-none lg:static lg:flex h-screen shrink-0 transition-transform duration-200 ease-in-out shadow-2xl lg:shadow-none
+          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
         <Sidebar />
       </aside>
 
-      <main className="flex-1 overflow-y-auto max-h-screen p-3 md:p-5 bg-stone-100 text-stone-900 w-full min-w-0">
+      <main className="app-workspace flex-1 overflow-y-auto max-h-screen p-3 md:p-5 bg-stone-100 text-stone-900 w-full min-w-0">
         {loadingRole ? (
           <div className="min-h-[70vh] flex items-center justify-center" role="status">
             <Loader2 size={24} className="animate-spin text-stone-500" />

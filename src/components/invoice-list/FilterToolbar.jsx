@@ -1,5 +1,7 @@
 'use client';
 
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 import { Search, Calendar, FileSpreadsheet } from 'lucide-react';
 
 export default function FilterToolbar({
@@ -22,7 +24,7 @@ export default function FilterToolbar({
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             type="text"
-            placeholder="Cari No. Invoice..."
+            placeholder="Search invoice number..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="text-xs pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 w-44"
@@ -30,18 +32,18 @@ export default function FilterToolbar({
         </div>
 
         {/* Filter Nama PT */}
-        <select
+        <SearchableSelect
           value={filterPt}
           onChange={(e) => onPtChange(e.target.value)}
-          className="text-xs py-2 px-3 bg-stone-50 border border-stone-300 rounded-lg text-stone-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="min-w-[5rem]"
         >
-          <option value="">Semua Nama PT</option>
+          <option value="">All companies</option>
           {ptOptions.map((pt) => (
             <option key={pt} value={pt}>
               {pt}
             </option>
           ))}
-        </select>
+        </SearchableSelect>
 
         {/* Filter Rentang Tanggal */}
         <div className="flex items-center gap-1.5 text-xs text-stone-500 bg-stone-50 border border-stone-300 px-3 py-1.5 rounded-lg">

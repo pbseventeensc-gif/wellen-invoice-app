@@ -105,3 +105,86 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Invoice integrity fix (2026-11-12)
+
+Apply `supabase/migrations/20261112090000_fix_invoice_integrity.sql` after all
+previous migrations and **before deploying this frontend**. Run the new SQL in
+the target project's Supabase SQL Editor, or use your configured migration
+workflow. It limits AR workflow reads to their own invoices, rejects missing
+roles, enforces draft claims transactionally, and supports resubmitting rejected
+invoice numbers with a server-managed `revision_history` column. Existing
+invoice amounts are not rewritten; exports prefer the explicit DPP for old
+Excel invoices. Verify legacy invoice amounts before exporting.
+
+PO lines selected for billing are now saved and claimed before opening the
+invoice form. Complete the actual client NPWP and address before tax export;
+example identities and fallback dates are no longer generated. NSFP numbers
+follow the complete loaded invoice order, including when only a subset is
+selected. Check the displayed range for each new export; number reservation
+across separate export sessions is not provided.
+
+Validation:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+`tests/invoice-integrity.sql` additionally checks role isolation, missing roles,
+draft reuse, rejection, and revision history in a **disposable** PostgreSQL
+installation with Supabase-compatible auth tables/functions and all migrations.
+It rolls back its fixtures. Do not bootstrap test auth tables in production.
+
+To deploy directly from the working directory after the database migration:
+
+```bash
+npx vercel login
+npx vercel link
+npx vercel --prod
+```
+
+Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the Vercel
+project's Production environment before deploying. If deployment uses the Git
+integration, pushing a branch creates a preview; production deployment follows
+the production branch configured in Vercel.
+
+## Client directory (2026-11-12)
+
+Apply `supabase/migrations/20261113010000_client_directory.sql` to enable the
+Clients directory. It creates a role-protected shared client table, backfills
+names and the latest known nonempty billing addresses from existing drafts and
+invoices, and adds a trigger that saves client details in the same transaction
+as each future draft import. Manually maintained addresses are protected from
+later Excel imports, including blank address cells.
+
+The importer reads `Customer ANT`, `Client Name`, `Customer Name`, or `Nama Klien`
+for the name and `Client Address`, `Customer Address`, `Billing Address`, `Alamat`,
+`Alamat Klien`, or `Alamat Penagihan` for the billing address. The supplied test
+workbook has no address column. Use **Clients** to complete those missing
+addresses; no addresses are invented. Approval Managers and Super Admins can
+maintain this directory; AR Creators and Accounting can read it.
+
+Create Invoice matches client names without case, punctuation, or whitespace
+differences, then uses the saved billing address. An address edited in the
+invoice form remains specific to that invoice. Existing approved invoices are
+not rewritten by directory changes. Clear Invoice Data also preserves the
+client directory.
+
+`tests/client-directory.sql` tests database synchronization, normalization,
+manual address protection, and role permissions in a disposable database only.
+
+## Client phone numbers
+
+Apply `supabase/migrations/20261114010000_client_phone_numbers.sql` before using
+phone editing in Clients. It adds the optional `phone_number` text column and
+`save_client_contact` RPC, preserving leading zeroes and international prefixes.
+Contact edits save the name, address, and phone in one transaction with the
+existing client editor permissions. Existing Excel imports preserve saved phones.
+
+`tests/client-phone.sql` checks contact edits, clearing phones, import preservation,
+failed-save atomicity, and role restrictions in a disposable database with the
+client directory and import migrations installed. Until the contact migration is
+applied, address-only edits remain available; nonempty phones show a setup error
+instead of being silently discarded.

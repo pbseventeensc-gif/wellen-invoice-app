@@ -1,5 +1,7 @@
 'use client';
 
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
 export default function TablePagination({
   currentPage,
   pageSize,
@@ -19,16 +21,16 @@ export default function TablePagination({
         {pageSizeOptions && onPageSizeChange && (
           <label className="flex items-center gap-2">
             Rows per page
-            <select
+            <SearchableSelect
               aria-label="Rows per page"
               value={pageSize}
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+              className="min-w-[5rem]"
             >
               {pageSizeOptions.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </label>
         )}
       </div>

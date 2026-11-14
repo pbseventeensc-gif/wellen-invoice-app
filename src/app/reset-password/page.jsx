@@ -18,12 +18,12 @@ export default function ResetPasswordPage() {
     setErrorMsg(null);
 
     if (password.length < 6) {
-      setErrorMsg('Kata sandi minimal 6 karakter.');
+      setErrorMsg('Your password must contain at least 6 characters.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorMsg('Konfirmasi kata sandi tidak cocok.');
+      setErrorMsg('Passwords do not match.');
       return;
     }
 
@@ -50,8 +50,8 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 font-sans text-stone-100">
       <div className="w-full max-w-md rounded-2xl border border-stone-800 bg-stone-900/90 p-8 shadow-2xl backdrop-blur-xl">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold tracking-tight text-stone-100">Buat Kata Sandi Baru</h1>
-          <p className="mt-1 text-xs text-stone-400">Silakan tentukan kata sandi baru untuk akun Anda</p>
+          <h1 className="text-xl font-bold tracking-tight text-stone-100">Create a New Password</h1>
+          <p className="mt-1 text-xs text-stone-400">Choose a new password for your account.</p>
         </div>
 
         {errorMsg && (
@@ -64,13 +64,13 @@ export default function ResetPasswordPage() {
         {isDone ? (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-center text-amber-700">
             <CheckCircle2 size={32} />
-            <p className="text-sm font-semibold">Kata Sandi Berhasil Diperbarui!</p>
-            <p className="text-xs text-stone-300">Mengalihkan ke dashboard...</p>
+            <p className="text-sm font-semibold">Password Updated!</p>
+            <p className="text-xs text-stone-300">Redirecting to invoices...</p>
           </div>
         ) : (
           <form onSubmit={handleUpdatePassword} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-300">Kata Sandi Baru</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-300">New Password</label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500">
                   <Lock size={16} />
@@ -80,14 +80,14 @@ export default function ResetPasswordPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Minimal 6 karakter"
+                  placeholder="At least 6 characters"
                   className="w-full rounded-xl border border-stone-800 bg-stone-950/60 py-2.5 pl-10 pr-3 text-xs text-stone-100 placeholder-stone-600 outline-none transition focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-stone-300">Konfirmasi Kata Sandi</label>
+              <label className="mb-1.5 block text-xs font-medium text-stone-300">Confirm Password</label>
               <div className="relative">
                 <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500">
                   <Lock size={16} />
@@ -97,7 +97,7 @@ export default function ResetPasswordPage() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Ulangi kata sandi"
+                  placeholder="Repeat your password"
                   className="w-full rounded-xl border border-stone-800 bg-stone-950/60 py-2.5 pl-10 pr-3 text-xs text-stone-100 placeholder-stone-600 outline-none transition focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                 />
               </div>
@@ -111,10 +111,10 @@ export default function ResetPasswordPage() {
               {loading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Menyimpan...</span>
+                  <span>Saving...</span>
                 </>
               ) : (
-                'Simpan Kata Sandi'
+                'Save Password'
               )}
             </button>
           </form>

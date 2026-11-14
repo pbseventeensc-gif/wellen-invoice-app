@@ -5,9 +5,9 @@ export default async function LoginPage({ searchParams }) {
   const error = Array.isArray(params?.error) ? params.error[0] : params?.error;
 
   const initialError = error === 'access'
-    ? 'Akun belum memiliki izin aplikasi. Silakan hubungi administrator.'
+    ? 'Your account does not have access to this app. Please contact an administrator.'
     : error === 'session'
-      ? 'Sesi tidak valid atau telah berakhir. Silakan masuk kembali.'
+      ? 'Your session is invalid or has expired. Please sign in again.'
       : null;
 
   return <LoginForm initialError={initialError} />;

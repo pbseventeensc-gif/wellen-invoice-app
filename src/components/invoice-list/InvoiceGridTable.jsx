@@ -8,8 +8,8 @@ export default function InvoiceGridTable({ invoices, onDownloadPdf }) {
     return (
       <div className="bg-white rounded-xl border border-stone-200 p-12 text-center text-stone-400 shadow-sm">
         <FileText size={40} className="mx-auto mb-3 text-stone-300" />
-        <p className="text-sm font-medium text-stone-600">Belum ada data invoice.</p>
-        <p className="text-xs text-stone-400 mt-1">Buat invoice baru dari file rekapan Excel melalui menu Import WPP.</p>
+        <p className="text-sm font-medium text-stone-600">No invoices yet.</p>
+        <p className="text-xs text-stone-400 mt-1">Create an invoice from an Excel recap using Import WPP.</p>
       </div>
     );
   }
@@ -21,16 +21,16 @@ export default function InvoiceGridTable({ invoices, onDownloadPdf }) {
           <thead className="bg-stone-50 text-stone-600 sticky top-0 border-b border-stone-200 uppercase font-semibold text-[11px] tracking-wider">
             <tr>
               <th className="p-3.5">No Invoice</th>
-              <th className="p-3.5">Klien (PT)</th>
-              <th className="p-3.5">Nama Project / Promo</th>
-              <th className="p-3.5 text-right">Nilai Inv</th>
-              <th className="p-3.5 text-right">DPP Lain</th>
-              <th className="p-3.5 text-right">PPN (11%)</th>
+              <th className="p-3.5">Client (Company)</th>
+              <th className="p-3.5">Project / Promo Name</th>
+              <th className="p-3.5 text-right">Invoice Amount</th>
+              <th className="p-3.5 text-right">Alternative Tax Base</th>
+              <th className="p-3.5 text-right">VAT (11%)</th>
               <th className="p-3.5 text-right">Total</th>
               <th className="p-3.5">AR Create Inv</th>
               <th className="p-3.5">Time Created</th>
               <th className="p-3.5">Time Download</th>
-              <th className="p-3.5 text-center">Aksi</th>
+              <th className="p-3.5 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-200">
@@ -52,7 +52,7 @@ export default function InvoiceGridTable({ invoices, onDownloadPdf }) {
                 </td>
                 <td className="p-3.5 text-stone-500 whitespace-nowrap">{inv.time_created}</td>
                 <td className="p-3.5 text-stone-500 whitespace-nowrap">
-                  {inv.time_download || <span className="text-stone-400 italic">Belum diunduh</span>}
+                  {inv.time_download || <span className="text-stone-400 italic">Not downloaded</span>}
                 </td>
                 <td className="p-3.5 text-center">
                   <button
